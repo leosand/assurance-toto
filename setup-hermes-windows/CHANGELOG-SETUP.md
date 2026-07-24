@@ -10,6 +10,7 @@
 ### Corrigé
 - **`docker-compose.lite.yml`** : Mis à jour pour utiliser des `Dockerfile` locaux (`agents/*/Dockerfile`) afin que `COPY hermes.config.json` et `COPY skills/` fonctionnent correctement dans le contexte de build.
 - **Outils** : Ajout de `scripts/fix-docker-creds.sh` pour aider à corriger les problèmes de credential helper Docker qui empêchaient le pull/build des images.
+ - **Fix** : Ajout d'un service `db` (MongoDB) requis par Rocket.Chat et mis à jour de la dépendance du service Rocke.Chat dans `docker-compose.lite.yml`.
 
 ## [1.0.1] — 2026-07-24
 

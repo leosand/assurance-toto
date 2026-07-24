@@ -15,6 +15,7 @@ networks:
 volumes:
   pg_data:
   gitea_data:
+  mongo_data:
   hermes_orch_home:
   hermes_sales_home:
   hermes_uw_home:
@@ -81,9 +82,17 @@ services:
     container_name: toto-rocketchat
     restart: unless-stopped
     networks: [net-dept]
-    depends_on: [postgres]
+    depends_on: [db]
     ports:
       - "3001:3000"
+
+  db:
+    image: mongo:6
+    container_name: toto-mongo
+    restart: unless-stopped
+    networks: [net-core, net-dept]
+    volumes:
+      - mongo_data:/data/db
 
   mcp-postgres:
     image: mcp/postgres-toolbox:latest
