@@ -1,0 +1,10 @@
+{
+  "remote.WSL.fileWatcher.polling": true,
+  "terminal.integrated.defaultProfile.windows": "Ubuntu (WSL)",
+  "files.eol": "\n",
+  "editor.formatOnSave": true,
+  "docker.dockerPath": "docker",
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json": "docker-compose*.yml"
+  }
+}

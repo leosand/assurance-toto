@@ -1,0 +1,11 @@
+{
+  "allowed_tools": [
+    "mcp-postgres",
+    "mcp-git",
+    "searxng",
+    "mailhog",
+    "rocketchat"
+  ],
+  "denied_tools": [],
+  "notes": "Liste blanche MCP pour la version lite — restreinte aux outils déployés."
+}

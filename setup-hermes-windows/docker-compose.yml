@@ -1,0 +1,323 @@
+ 
+
+networks:
+  net-core:
+    driver: bridge
+  net-dept:
+    driver: bridge
+  net-external:
+    driver: bridge
+
+volumes:
+  pg_data:
+  ollama_models:
+  gitea_data:
+  rocketchat_data:
+  hermes_orch_home:
+  hermes_sales_home:
+  hermes_uw_home:
+  hermes_claims_home:
+  hermes_support_home:
+  hermes_finance_home:
+  hermes_mkt_home:
+  hermes_hr_home:
+  hermes_comp_home:
+
+services:
+
+  # ============ INFRASTRUCTURE DE BASE ============
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: toto-postgres
+    restart: unless-stopped
+    networks: [net-core]
+    environment:
+      POSTGRES_DB: ${PG_DB}
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+    volumes:
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER}"]
+      interval: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: toto-redis
+    restart: unless-stopped
+    networks: [net-core, net-dept]
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: toto-ollama
+    restart: unless-stopped
+    networks: [net-dept]
+    volumes:
+      - ollama_models:/root/.ollama
+    environment:
+      OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_SIZE}
+
+  gitea:
+    image: gitea/gitea:latest
+    container_name: toto-gitea
+    restart: unless-stopped
+    networks: [net-dept]
+    environment:
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__server__DOMAIN: ${GITEA_DOMAIN}
+      GITEA__server__ROOT_URL: ${GITEA_ROOT_URL}
+      GITEA__security__INSTALL_LOCK: "true"
+    volumes:
+      - gitea_data:/data
+    ports:
+      - "3000:3000"
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: toto-searxng
+    restart: unless-stopped
+    networks: [net-external]
+    volumes:
+      - ./infra/searxng/settings.yml:/etc/searxng/settings.yml:ro
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: toto-mailhog
+    restart: unless-stopped
+    networks: [net-external, net-dept]
+    ports:
+      - "8025:8025"
+
+  rocketchat:
+    image: rocket.chat:6.10
+    container_name: toto-rocketchat
+    restart: unless-stopped
+    networks: [net-dept]
+    depends_on: [postgres]
+    ports:
+      - "3001:3000"
+    volumes:
+      - rocketchat_data:/app/uploads
+
+  twenty-crm:
+    image: twentycrm/twenty:latest
+    container_name: toto-twenty
+    restart: unless-stopped
+    networks: [net-dept]
+    depends_on: [postgres]
+    environment:
+      PG_DATABASE_URL: ${TWENTY_DB_URL}
+      APP_SECRET: ${TWENTY_APP_SECRET}
+    ports:
+      - "3002:3000"
+
+  # ============ MCP SERVERS ============
+
+  mcp-postgres:
+    image: mcp/postgres-toolbox:latest
+    container_name: toto-mcp-postgres
+    restart: unless-stopped
+    networks: [net-core, net-dept]
+    environment:
+      DATABASE_URL: postgres://${PG_USER}:${PG_PASSWORD}@postgres:5432/${PG_DB}
+    depends_on: [postgres]
+
+  mcp-presidio:
+    build: ./security/presidio-mcp
+    container_name: toto-mcp-presidio
+    restart: unless-stopped
+    networks: [net-dept]
+
+  mcp-git:
+    build: ./infra/git-mcp
+    container_name: toto-mcp-git
+    restart: unless-stopped
+    networks: [net-dept]
+    environment:
+      GITEA_REPO_URL: ${GITEA_REPO_URL}
+      GITEA_ACCESS_TOKEN: ${GITEA_ACCESS_TOKEN}
+    depends_on: [gitea]
+
+  mcp-macro-wrapper:
+    build: ./gamification/mcp-macro-wrapper
+    container_name: toto-mcp-macro
+    restart: unless-stopped
+    networks: [net-dept, net-external]
+    environment:
+      BDF_WEBSTAT_API: ${BDF_WEBSTAT_API}
+      INSEE_MELODI_API: ${INSEE_MELODI_API}
+      GPR_INDEX_SOURCE: ${GPR_INDEX_SOURCE}
+
+  # ============ MOTEUR DE GAMIFICATION ============
+
+  gamification-engine:
+    build: ./gamification/engine
+    container_name: toto-gamification
+    restart: unless-stopped
+    networks: [net-dept]
+    depends_on: [mcp-postgres, mcp-macro-wrapper]
+    volumes:
+      - ./reports:/app/reports
+      - ./decisions:/app/decisions
+    env_file: .env
+
+  # ============ AGENTS HERMES (1 par département) ============
+
+  agent-orchestrateur:
+    build:
+      context: ./agents/orchestrateur
+      dockerfile: ../../hermes.dockerfile
+    container_name: toto-agent-orchestrateur
+    restart: unless-stopped
+    networks: [net-dept]
+    volumes:
+      - ./agents/orchestrateur:/home/agent/workspace:ro
+      - ./security/mcp-allowlist.json:/home/agent/mcp-allowlist.json:ro
+      - hermes_orch_home:/home/agent/.hermes
+    environment:
+      OLLAMA_HOST: ${OLLAMA_HOST}
+      OLLAMA_MODEL: ${OLLAMA_MODEL_PRIMARY}
+      HERMES_APPROVAL_MODE: ${HERMES_APPROVAL_MODE}
+      AGENT_ROLE: orchestrateur
+    depends_on: [ollama, mcp-postgres, redis, mcp-git]
+
+  agent-sales:
+    build:
+      context: ./agents/sales
+      dockerfile: ../../hermes.dockerfile
+    container_name: toto-agent-sales
+    restart: unless-stopped
+    networks: [net-dept, net-external]
+    volumes:
+      - ./agents/sales:/home/agent/workspace:ro
+      - ./security/mcp-allowlist.json:/home/agent/mcp-allowlist.json:ro
+      - hermes_sales_home:/home/agent/.hermes
+    environment:
+      OLLAMA_HOST: ${OLLAMA_HOST}
+      OLLAMA_MODEL: ${OLLAMA_MODEL_PRIMARY}
+      AGENT_ROLE: sales
+    depends_on: [ollama, mcp-postgres, searxng, rocketchat, twenty-crm]
+
+  agent-souscription:
+    build:
+      context: ./agents/souscription
+      dockerfile: ../../hermes.dockerfile
+    container_name: toto-agent-souscription
+    restart: unless-stopped
+    networks: [net-dept]
+    volumes:
+      - ./agents/souscription:/home/agent/workspace:ro
+      - ./security/mcp-allowlist.json:/home/agent/mcp-allowlist.json:ro
+      - hermes_uw_home:/home/agent/.hermes
+    environment:
+      OLLAMA_HOST: ${OLLAMA_HOST}
+      OLLAMA_MODEL: ${OLLAMA_MODEL_PRIMARY}
+      AGENT_ROLE: souscription
+    depends_on: [ollama, mcp-postgres, rocketchat]
+
+  agent-sinistres-contentieux:
+    build:
+      context: ./agents/sinistres-contentieux
+      dockerfile: ../../hermes.dockerfile
+    container_name: toto-agent-sinistres
+    restart: unless-stopped
+    networks: [net-dept, net-external]
+    volumes:
+      - ./agents/sinistres-contentieux:/home/agent/workspace:ro
+      - ./security/mcp-allowlist.json:/home/agent/mcp-allowlist.json:ro
+      - hermes_claims_home:/home/agent/.hermes
+    environment:
+      OLLAMA_HOST: ${OLLAMA_HOST}
+      OLLAMA_MODEL: ${OLLAMA_MODEL_PRIMARY}
+      HERMES_ESCALATION_THRESHOLD_EUR: ${HERMES_ESCALATION_THRESHOLD_EUR}
+      AGENT_ROLE: sinistres-contentieux
+    depends_on: [ollama, mcp-postgres, mailhog, rocketchat]
+
+  agent-support:
+    build:
+      context: ./agents/support
+      dockerfile: ../../hermes.dockerfile
+    container_name: toto-agent-support
+    restart: unless-stopped
+    networks: [net-dept]
+    volumes:
+      - ./agents/support:/home/agent/workspace:ro
+      - ./security/mcp-allowlist.json:/home/agent/mcp-allowlist.json:ro
+      - hermes_support_home:/home/agent/.hermes
+    environment:
+      OLLAMA_HOST: ${OLLAMA_HOST}
+      OLLAMA_MODEL: ${OLLAMA_MODEL_FALLBACK}
+      AGENT_ROLE: support
+    depends_on: [ollama, mcp-postgres, mailhog, rocketchat]
+
+  agent-finance:
+    build:
+      context: ./agents/finance
+      dockerfile: ../../hermes.dockerfile
+    container_name: toto-agent-finance
+    restart: unless-stopped
+    networks: [net-dept]
+    volumes:
+      - ./agents/finance:/home/agent/workspace:ro
+      - ./security/mcp-allowlist.json:/home/agent/mcp-allowlist.json:ro
+      - hermes_finance_home:/home/agent/.hermes
+    environment:
+      OLLAMA_HOST: ${OLLAMA_HOST}
+      OLLAMA_MODEL: ${OLLAMA_MODEL_PRIMARY}
+      AGENT_ROLE: finance
+    depends_on: [ollama, mcp-postgres, mcp-macro-wrapper, gamification-engine]
+
+  agent-marketing:
+    build:
+      context: ./agents/marketing
+      dockerfile: ../../hermes.dockerfile
+    container_name: toto-agent-marketing
+    restart: unless-stopped
+    networks: [net-dept, net-external]
+    volumes:
+      - ./agents/marketing:/home/agent/workspace:ro
+      - ./security/mcp-allowlist.json:/home/agent/mcp-allowlist.json:ro
+      - hermes_mkt_home:/home/agent/.hermes
+    environment:
+      OLLAMA_HOST: ${OLLAMA_HOST}
+      OLLAMA_MODEL: ${OLLAMA_MODEL_FALLBACK}
+      AGENT_ROLE: marketing
+    depends_on: [ollama, searxng, rocketchat]
+
+  agent-rh:
+    build:
+      context: ./agents/rh
+      dockerfile: ../../hermes.dockerfile
+    container_name: toto-agent-rh
+    restart: unless-stopped
+    networks: [net-dept]
+    volumes:
+      - ./agents/rh:/home/agent/workspace:ro
+      - ./security/mcp-allowlist.json:/home/agent/mcp-allowlist.json:ro
+      - hermes_hr_home:/home/agent/.hermes
+    environment:
+      OLLAMA_HOST: ${OLLAMA_HOST}
+      OLLAMA_MODEL: ${OLLAMA_MODEL_FALLBACK}
+      AGENT_ROLE: rh
+    depends_on: [ollama, mcp-postgres]
+
+  agent-conformite-it:
+    build:
+      context: ./agents/conformite-it
+      dockerfile: ../../hermes.dockerfile
+    container_name: toto-agent-conformite
+    restart: unless-stopped
+    networks: [net-dept]
+    volumes:
+      - ./agents/conformite-it:/home/agent/workspace:ro
+      - ./security/mcp-allowlist.json:/home/agent/mcp-allowlist.json:ro
+      - hermes_comp_home:/home/agent/.hermes
+    environment:
+      OLLAMA_HOST: ${OLLAMA_HOST}
+      OLLAMA_MODEL: ${OLLAMA_MODEL_PRIMARY}
+      AGENT_ROLE: conformite-it
+    depends_on: [ollama, mcp-postgres, mcp-presidio]

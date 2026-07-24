@@ -1,0 +1,16 @@
+{
+  "agent_name": "sales",
+  "role": "Agent commercial — prospection, qualification leads, devis auto",
+  "model": "${OLLAMA_MODEL}",
+  "ollama_host": "${OLLAMA_HOST}",
+  "skills_dir": "/home/agent/workspace/skills",
+  "mcp_servers": {
+    "postgres": { "url": "http://mcp-postgres:8080" },
+    "git": { "url": "http://mcp-git:8080" }
+  },
+  "tools_allowlist": "/home/agent/mcp-allowlist.json",
+  "logging": {
+    "level": "info",
+    "format": "json"
+  }
+}

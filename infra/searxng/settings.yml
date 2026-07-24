@@ -1,0 +1,13 @@
+# infra/searxng/settings.yml
+use_default_settings: true
+server:
+  secret_key: "changeme_random_secret"
+  limiter: false
+search:
+  safe_search: 1
+  autocomplete: ""
+engines:
+  - name: google
+    disabled: false
+  - name: bing
+    disabled: false
