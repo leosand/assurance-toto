@@ -1,0 +1,69 @@
+# docker-compose.legacy-rocketchat.yml — ARCHIVE (ne pas démarrer tel quel)
+#
+# ⚠️  Ce fichier conserve la traçabilité de l'ancien canal « Rocket.Chat +
+#     MongoDB » et des services historiques (ollama conteneurisé,
+#     gamification-engine, mcp-macro-wrapper). Il N'EST PAS maintenu et ne doit
+#     PAS être utilisé pour la démo actuelle.
+#
+# Migration :
+#   - Canal de collaboration → Buzz (relais ghcr.io/block/buzz:main)
+#     cf. ADR-001 dans decisions/ceo-log.md et buzz-hermes-bridge/README.md
+#   - Le bridge Buzz↔Hermes remplace les intégrations Rocket.Chat directes.
+#   - « docker-compose.lite.yml » (racine) est le point d'entrée actuel.
+#   - Setup historique Windows conservé sous setup-hermes-windows/.
+#
+# Si une exploration historique est nécessaire :
+#   docker compose -f docker-compose.legacy-rocketchat.yml config
+
+name: assurance-toto-legacy-rocketchat
+
+networks:
+  net-core:
+    driver: bridge
+  net-dept:
+    driver: bridge
+  net-external:
+    driver: bridge
+
+volumes:
+  pg_data:
+  gitea_data:
+  rocketchat_data:   # historique : uploads/dumps Rocket.Chat
+  mongo_data:        # base Rocket.Chat (OPlog requis)
+
+services:
+
+  db:
+    image: mongo:6
+    container_name: toto-mongo
+    restart: unless-stopped
+    networks: [net-core, net-dept]
+    command: ["mongod", "--replSet", "rs0", "--oplogSize", "128"]
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'rs.initiate().ok || rs.status().ok' | grep 1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  rocketchat:
+    image: rocket.chat:6.10
+    container_name: toto-rocketchat
+    restart: unless-stopped
+    networks: [net-dept]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MONGO_URL: mongodb://db:27017/rocketchat?replicaSet=rs0
+      MONGO_OPLOG_URL: mongodb://db:27017/local?replicaSet=rs0
+      ROOT_URL: http://localhost:3001
+      PORT: "3000"
+      DEPLOY_METHOD: docker
+      OVERWRITE_SETTING_Show_Setup_Wizard: completed
+      ADMIN_USERNAME: ${ROCKETCHAT_ADMIN_USER}
+      ADMIN_PASS: ${ROCKETCHAT_ADMIN_PASSWORD}
+    ports:
+      - "3001:3000"

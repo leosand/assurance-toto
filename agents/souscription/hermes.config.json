@@ -1,16 +1,9 @@
 {
   "agent_name": "souscription",
-  "role": "Agent souscription — analyse de risque, grille de tarification",
-  "model": "${OLLAMA_MODEL}",
-  "ollama_host": "${OLLAMA_HOST}",
-  "skills_dir": "/home/agent/workspace/skills",
-  "mcp_servers": {
-    "postgres": { "url": "http://mcp-postgres:8080" },
-    "git": { "url": "http://mcp-git:8080" }
-  },
-  "tools_allowlist": "/home/agent/mcp-allowlist.json",
-  "logging": {
-    "level": "info",
-    "format": "json"
-  }
+  "role": "Agent souscription — analyse de risque et application de la grille de tarification officielle.",
+  "model": "gemma4:e4b",
+  "skills_dir": "/workspace/skills",
+  "allowlist_path": "/home/hermes/mcp-allowlist.json",
+  "thresholds": { "score_risque_max": 80, "escalation_eur": 5000, "autonomie_secondes": 0 },
+  "logging": { "level": "info", "format": "json" }
 }

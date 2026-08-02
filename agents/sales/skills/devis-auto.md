@@ -1,13 +1,16 @@
-# Skill: Génération de Devis Auto
+---
+name: devis-auto
+description: Calcule une prime indicative pour un devis d'assurance auto.
+tools: [calculer_prime, qualifier_lead]
+---
+
+# Skill : Devis Auto
 
 ## Rôle
-Générer un devis d'assurance auto réaliste pour un lead qualifié, avant transmission à la Souscription.
+Produire un chiffrage indicatif de prime auto à partir des données du prospect.
 
 ## Instructions
-1. Récupère le profil du lead qualifié et les caractéristiques du véhicule associé.
-2. Applique une grille tarifaire indicative :
-   - Prime de base : 400€/an (citadine) à 900€/an (SUV/berline puissante)
-   - Ajustement bonus-malus : × coefficient (0.5 à 3.5)
-   - Ajustement zone Paris : +15% (risque vol/vandalisme urbain)
-3. Génère un document Markdown de devis, l'envoie via `mailhog` au client simulé.
-4. Si le client (simulé) accepte dans les 48h simulées, transmets à l'agent Souscription pour émission du contrat.
+1. Appelle `calculer_prime` avec les données de risque (âge, bonus-malus, véhicule, zone, formule).
+2. Présente la prime annuelle indicative ET les facteurs appliqués (transparence).
+3. Rappelle que le tarif final relève de Souscription (grille officielle + risque).
+4. Ne promets jamais un tarif ferme : un devis est indicatif.

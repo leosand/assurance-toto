@@ -1,2 +1,39 @@
-.aider*
+# === Secrets (jamais en Git) ===
 .env
+.env.*
+!.env.example
+!.env.*.example
+
+# === Harness ===
+.harness/backups/
+.aider*
+
+# === Archives legacy (pas des sources) ===
+*.zip
+
+# === Artefacts de build / deps (TS, dashboard, bridge) ===
+node_modules/
+dist/
+build/
+coverage/
+.next/
+out/
+*.tsbuildinfo
+.turbo/
+
+# === Logs & temp ===
+logs/
+*.log
+tmp/
+.kimi-code-temp/
+
+# === OS / éditeurs ===
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# === Données locales (volumes déversés, dumps) ===
+data/
+dumps/
+*.sql.gz

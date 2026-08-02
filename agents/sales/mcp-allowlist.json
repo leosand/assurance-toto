@@ -1,0 +1,6 @@
+{
+  "commentaire": "sales — least-privilege : qualification, devis indicatif, lecture client/contrat.",
+  "mcp_servers": ["mcp-postgres", "searxng", "mailhog"],
+  "tools": ["qualifier_lead", "calculer_prime", "lire_client", "lire_contrat", "consulter_memoire"],
+  "notes": "Recherche web via searxng, emails entrants via mailhog. AUCUN outil de règlement. mcp-postgres read-only."
+}

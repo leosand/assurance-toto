@@ -1,0 +1,16 @@
+{
+  "commentaire": "orchestrateur — read-only sur toutes les tables + pont vers le bridge (relai de commandes validées).",
+  "mcp_servers": ["mcp-postgres", "bridge"],
+  "tools": [
+    "lire_sinistre",
+    "lire_client",
+    "lire_contrat",
+    "calculer_prime",
+    "evaluer_risque",
+    "qualifier_lead",
+    "recommander_reglement",
+    "requeter_pnl",
+    "consulter_memoire"
+  ],
+  "notes": "mcp-postgres via .gateway en SELECT-only ; bridge = POST /commands pour relayer une recommandation déjà émise par un département."
+}

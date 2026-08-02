@@ -1,0 +1,6 @@
+{
+  "commentaire": "sinistres-contentieux — lecture sinistres/clients/contrats + recommandation de règlement.",
+  "mcp_servers": ["mcp-postgres", "mailhog", "presidio"],
+  "tools": ["lire_sinistre", "lire_client", "lire_contrat", "recommander_reglement", "consulter_memoire"],
+  "notes": "recommander_reglement → commande candidate claim.settlement.approve au bridge ; règlement réel appliqué par le bridge (politique + approbation CEO)."
+}

@@ -1,0 +1,64 @@
+# CI — Assurance Toto (checks reproductibles)
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@<sha>
+      - uses: actions/setup-node@<sha>
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: buzz-hermes-bridge/package-lock.json
+      - name: Install
+        run: npm ci
+        working-directory: buzz-hermes-bridge
+      - name: Typecheck (strict)
+        run: npx tsc -p tsconfig.json --noEmit
+        working-directory: buzz-hermes-bridge
+      - name: Unit tests (security-critical paths)
+        run: npm test
+        working-directory: buzz-hermes-bridge
+
+  runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@<sha>
+      - uses: actions/setup-node@<sha>
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: agents/_runtime/package-lock.json
+      - name: Install
+        run: npm ci
+        working-directory: agents/_runtime
+      - name: Typecheck (strict)
+        run: npx tsc -p tsconfig.json --noEmit
+        working-directory: agents/_runtime
+      - name: Unit tests
+        run: npm test
+        working-directory: agents/_runtime
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@<sha>
+      - name: Validate compose syntax
+        run: |
+          docker compose -f docker-compose.lite.yml config -q --quiet
+          docker compose -f docker-compose.yml config -q --quiet
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@<sha>
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@<sha>
+        env:
+          GITLEAKS_LICENSE: ""  # free tier

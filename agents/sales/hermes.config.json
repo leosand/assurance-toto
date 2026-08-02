@@ -1,16 +1,9 @@
 {
   "agent_name": "sales",
-  "role": "Agent commercial — prospection, qualification leads, devis auto",
-  "model": "${OLLAMA_MODEL}",
-  "ollama_host": "${OLLAMA_HOST}",
-  "skills_dir": "/home/agent/workspace/skills",
-  "mcp_servers": {
-    "postgres": { "url": "http://mcp-postgres:8080" },
-    "git": { "url": "http://mcp-git:8080" }
-  },
-  "tools_allowlist": "/home/agent/mcp-allowlist.json",
-  "logging": {
-    "level": "info",
-    "format": "json"
-  }
+  "role": "Agent commercial — qualification des leads, devis auto indicatifs, prospection.",
+  "model": "gemma4:e4b",
+  "skills_dir": "/workspace/skills",
+  "allowlist_path": "/home/hermes/mcp-allowlist.json",
+  "thresholds": { "score_qualification_min": 0.6, "autonomie_secondes": 0 },
+  "logging": { "level": "info", "format": "json" }
 }

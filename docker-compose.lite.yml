@@ -1,29 +1,71 @@
-# docker-compose.lite.yml
-# Version allégée : 4 agents Hermes (Orchestrateur, Sales, Souscription, Sinistres-Contentieux)
-# Adaptée à un setup Windows 11 avec Ollama natif (Gemma 8B / Qwen2.5 7B), sans GPU dédié puissant.
-# Ollama tourne sur l'hôte Windows, PAS en conteneur — accès via host.docker.internal.
+# docker-compose.lite.yml — Assurance Toto (profil MVP)
+# Version allégée : 4 agents Hermes (orchestrateur, sales, souscription,
+# sinistres-contentieux) + sous-système Buzz complet (relais, PostgreSQL
+# dédié, MinIO), bridge Buzz↔Hermes et anonymisation PII (Presidio).
+#
+# Cible : Windows 11 + WSL2 + Docker Desktop, 16 Go RAM, AUCUNE API payante.
+# Ollama tourne NATIVE sur l'hôte Windows (pas en conteneur) — les conteneurs
+# l'atteignent via host.docker.internal (extra_hosts) et ${OLLAMA_HOST}.
+#
+# Démarrage : docker compose -f docker-compose.lite.yml --env-file .env up -d
+#
+# Rocket.Chat + MongoDB ont été retirés (canal remplacé par Buzz).
+# Historique préservé : docker-compose.legacy-rocketchat.yml + setup-hermes-windows/.
+# Tags non épinglés acceptés uniquement pour ghcr.io/block/buzz:main et
+# mcr.microsoft.com/presidio-analyzer (cf. ADR-001) — toutes les autres
+# images sont épinglées sur un tag explicite.
+
+name: assurance-toto-lite
 
 networks:
-  net-core:
+  net-core:      # zone de confiance interne : bases de données, files
     driver: bridge
-  net-dept:
+  net-dept:      # zone agents : agents Hermes, bridge, outils MCP
     driver: bridge
-  net-external:
+  net-external:  # zone exposée : outils qui parlent vers l'extérieur
     driver: bridge
 
 volumes:
-  pg_data:
+  pg_data:            # PostgreSQL métier (assurance)
   gitea_data:
-  mongo_data:
+  buzz_pg_data:       # PostgreSQL du relais Buzz (séparé du métier)
+  buzz_git_data:      # dépôts git gérés par le relais Buzz
+  minio_data:         # stockage S3 local (médias/artefacts Buzz)
   hermes_orch_home:
   hermes_sales_home:
   hermes_uw_home:
   hermes_claims_home:
 
+# ---------------------------------------------------------------------------
+# Fragments YAML réutilisés (composition par ancres).
+# ---------------------------------------------------------------------------
+
+# Facteur commun des services agents Hermes (runtime TS : agents/_runtime).
+x-hermes-agent: &hermes-agent
+  restart: unless-stopped
+  networks: [net-dept]
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
+# Env commun des agents. Le runtime lit Postgres et Presidio directement via
+# ses clients internes en lecture seule — le service mcp-postgres (image
+# cassée mcp/postgres-toolbox) a été retiré (voir README, section MCP).
+x-hermes-env: &hermes-env
+  OLLAMA_HOST: ${OLLAMA_HOST}
+  OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL}
+  LOG_LEVEL: ${HERMES_LOG_LEVEL:-info}
+  DATABASE_URL: postgres://${PG_USER}:${PG_PASSWORD}@postgres:5432/${PG_DB}
+  REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+  BRIDGE_URL: http://buzz-hermes-bridge:3100
+  PRESIDIO_URL: http://presidio-analyzer:3000
+  HERMES_ESCALATION_THRESHOLD_EUR: ${HERMES_ESCALATION_THRESHOLD_EUR}
+
 services:
 
+  # ============ INFRASTRUCTURE MÉTIER ============
+
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: toto-postgres
     restart: unless-stopped
     networks: [net-core]
@@ -31,23 +73,46 @@ services:
       POSTGRES_DB: ${PG_DB}
       POSTGRES_USER: ${PG_USER}
       POSTGRES_PASSWORD: ${PG_PASSWORD}
+    ports:
+      - "${PG_PORT:-5432}:5432"   # exposition locale pour seed (host)/health ; accès inter-conteneurs inchangé
     volumes:
-      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      # initdb exécute les .sql par ordre alphabétique — ordre forcé 00→02
+      - ./infra/postgres/init_extensions.sql:/docker-entrypoint-initdb.d/00_extensions.sql:ro
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ./infra/postgres/schema_v2.sql:/docker-entrypoint-initdb.d/02_schema_v2.sql:ro
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PG_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DB}"]
       interval: 10s
+      timeout: 5s
       retries: 5
+      start_period: 10s
 
   redis:
     image: redis:7-alpine
     container_name: toto-redis
     restart: unless-stopped
     networks: [net-core, net-dept]
-    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    command:
+      - "redis-server"
+      - "--requirepass"
+      - "${REDIS_PASSWORD}"
+      - "--maxmemory"
+      - "128mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+    environment:
+      # utilisé par le healthcheck interne
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   gitea:
-    image: gitea/gitea:latest
+    image: gitea/gitea:1.22
     container_name: toto-gitea
     restart: unless-stopped
     networks: [net-dept]
@@ -59,9 +124,15 @@ services:
       - gitea_data:/data
     ports:
       - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   searxng:
-    image: searxng/searxng:latest
+    image: searxng/searxng:2024.12.14
     container_name: toto-searxng
     restart: unless-stopped
     networks: [net-external]
@@ -69,38 +140,18 @@ services:
       - ./infra/searxng/settings.yml:/etc/searxng/settings.yml:ro
 
   mailhog:
-    image: mailhog/mailhog:latest
+    image: mailhog/mailhog:v1.0.1
     container_name: toto-mailhog
     restart: unless-stopped
     networks: [net-external, net-dept]
     ports:
       - "8025:8025"
-
-  rocketchat:
-    image: rocket.chat:6.10
-    container_name: toto-rocketchat
-    restart: unless-stopped
-    networks: [net-dept]
-    depends_on: [db]
-    ports:
-      - "3001:3000"
-
-  db:
-    image: mongo:6
-    container_name: toto-mongo
-    restart: unless-stopped
-    networks: [net-core, net-dept]
-    volumes:
-      - mongo_data:/data/db
-
-  mcp-postgres:
-    image: mcp/postgres-toolbox:latest
-    container_name: toto-mcp-postgres
-    restart: unless-stopped
-    networks: [net-core, net-dept]
-    environment:
-      DATABASE_URL: postgres://${PG_USER}:${PG_PASSWORD}@postgres:5432/${PG_DB}
-    depends_on: [postgres]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8025/ >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   mcp-git:
     build: ./infra/git-mcp
@@ -110,85 +161,257 @@ services:
     environment:
       GITEA_REPO_URL: ${GITEA_REPO_URL}
       GITEA_ACCESS_TOKEN: ${GITEA_ACCESS_TOKEN}
-    depends_on: [gitea]
+    depends_on:
+      gitea:
+        condition: service_healthy
 
-  # ============ 4 AGENTS HERMES SEULEMENT ============
+  # ============ SOUS-SYSTÈME BUZZ ============
+  # Buzz = pilier « collaboration » du jumeau numérique : les commandes du
+  # bridge (kill-switch, approbations CEO) transitent par son canal Nostr
+  # (messages kind 9, tag ["h", "<channel-uuid>"]).
+
+  postgres-buzz:
+    image: postgres:17-alpine
+    container_name: toto-buzz-postgres
+    restart: unless-stopped
+    networks: [net-core]
+    environment:
+      POSTGRES_DB: ${BUZZ_PG_DB}
+      POSTGRES_USER: ${BUZZ_PG_USER}
+      POSTGRES_PASSWORD: ${BUZZ_PG_PASSWORD}
+    volumes:
+      - buzz_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${BUZZ_PG_USER} -d ${BUZZ_PG_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    container_name: toto-minio
+    restart: unless-stopped
+    networks: [net-core]
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"   # API S3
+      - "9001:9001"   # console web
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || curl -fsS http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-11-21T17-21-54Z
+    container_name: toto-minio-init
+    networks: [net-core]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
+      mc mb --ignore-existing local/buzz-media;
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+
+  buzz:
+    # Image publiée du relais Buzz — pull uniquement ; ne jamais builder depuis
+    # les sources. Épinglement « :main » assumé : ADR-001.
+    image: ghcr.io/block/buzz:main
+    container_name: toto-buzz
+    restart: unless-stopped
+    networks: [net-core, net-dept]
+    environment:
+      DATABASE_URL: postgres://${BUZZ_PG_USER}:${BUZZ_PG_PASSWORD}@postgres-buzz:5432/${BUZZ_PG_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      BUZZ_S3_ENDPOINT: http://minio:9000
+      BUZZ_S3_ADDRESSING_STYLE: path
+      BUZZ_S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      BUZZ_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      BUZZ_S3_BUCKET: ${BUZZ_S3_BUCKET}
+      BUZZ_GIT_REPO_PATH: /data/git
+      BUZZ_AUTO_MIGRATE: "true"
+      BUZZ_BIND_ADDR: 0.0.0.0:3000
+      BUZZ_HEALTH_PORT: "8080"
+      BUZZ_WEB_DIR: /srv/buzz/web
+      RELAY_OWNER_PUBKEY: ${RELAY_OWNER_PUBKEY}
+      BUZZ_RELAY_PRIVATE_KEY: ${BUZZ_RELAY_PRIVATE_KEY}
+      BUZZ_REQUIRE_AUTH_TOKEN: "true"
+    volumes:
+      - buzz_git_data:/data/git
+    ports:
+      - "3002:3000"   # REST + WS + web UI du relais
+      - "8081:8080"   # endpoints santé dédiés (/health, /_liveness, /_readiness)
+    depends_on:
+      postgres-buzz:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      # node absent de l'image Buzz (Rust) ; endpoint réel exposé : /_liveness sur le port santé 8080.
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/_liveness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  buzz-hermes-bridge:
+    build: ./buzz-hermes-bridge
+    container_name: toto-buzz-hermes-bridge
+    restart: unless-stopped
+    networks: [net-core, net-dept]
+    environment:
+      DATABASE_URL: postgres://${PG_USER}:${PG_PASSWORD}@postgres:5432/${PG_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      BUZZ_RELAY_URL: http://buzz:3000
+      BUZZ_PRIVATE_KEY: ${BUZZ_PRIVATE_KEY}
+      BRIDGE_CEOPUBKEYS: ${BRIDGE_CEOPUBKEYS}
+      BRIDGE_ALLOWED_UNSIGNED_ROLES: ${BRIDGE_ALLOWED_UNSIGNED_ROLES}
+      BRIDGE_REQUIRE_SIGNED_COMMANDS: ${BRIDGE_REQUIRE_SIGNED_COMMANDS}
+      CLAIM_SETTLEMENT_THRESHOLD_EUR: ${CLAIM_SETTLEMENT_THRESHOLD_EUR}
+      PORT: "3100"
+    ports:
+      - "3100:3100"
+    depends_on:
+      buzz:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  presidio-analyzer:
+    # Image Microsoft ; tag « latest » assumé (ADR-001).
+    image: mcr.microsoft.com/presidio-analyzer:latest
+    container_name: toto-presidio-analyzer
+    restart: unless-stopped
+    networks: [net-core, net-dept]
+    ports:
+      - "3003:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3000/health').status==200 else 1)\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ============ 4 AGENTS HERMES (MVP) ============
 
   agent-orchestrateur:
+    <<: *hermes-agent
     build:
-      context: ./agents/orchestrateur
+      context: .
+      dockerfile: agents/orchestrateur/Dockerfile
     container_name: toto-agent-orchestrateur
-    restart: unless-stopped
-    networks: [net-dept]
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - ./agents/orchestrateur:/home/agent/workspace:ro
       - ./security/mcp-allowlist.json:/home/agent/mcp-allowlist.json:ro
       - hermes_orch_home:/home/agent/.hermes
     environment:
-      OLLAMA_HOST: ${OLLAMA_HOST}
+      <<: *hermes-env
       OLLAMA_MODEL: ${OLLAMA_MODEL_PRIMARY}
       HERMES_APPROVAL_MODE: ${HERMES_APPROVAL_MODE}
       AGENT_ROLE: orchestrateur
-    depends_on: [redis, mcp-git]
+      MEMORY_DEPARTEMENT: orchestrateur
+      AGENT_NPUB: ${AGENT_NPUB_ORCHESTRATEUR:-}
+      AGENT_NSEC: ${AGENT_NSEC_ORCHESTRATEUR:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+      mcp-git:
+        condition: service_started
+      buzz-hermes-bridge:
+        condition: service_started
 
   agent-sales:
+    <<: *hermes-agent
     build:
-      context: ./agents/sales
+      context: .
+      dockerfile: agents/sales/Dockerfile
     container_name: toto-agent-sales
-    restart: unless-stopped
     networks: [net-dept, net-external]
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - ./agents/sales:/home/agent/workspace:ro
       - ./security/mcp-allowlist.json:/home/agent/mcp-allowlist.json:ro
       - hermes_sales_home:/home/agent/.hermes
     environment:
-      OLLAMA_HOST: ${OLLAMA_HOST}
+      <<: *hermes-env
       OLLAMA_MODEL: ${OLLAMA_MODEL_PRIMARY}
       AGENT_ROLE: sales
-    depends_on: [mailhog, rocketchat]
+      MEMORY_DEPARTEMENT: sales
+      AGENT_NPUB: ${AGENT_NPUB_SALES:-}
+      AGENT_NSEC: ${AGENT_NSEC_SALES:-}
+    depends_on:
+      mailhog:
+        condition: service_healthy
+      buzz-hermes-bridge:
+        condition: service_started
 
   agent-souscription:
+    <<: *hermes-agent
     build:
-      context: ./agents/souscription
+      context: .
+      dockerfile: agents/souscription/Dockerfile
     container_name: toto-agent-souscription
-    restart: unless-stopped
-    networks: [net-dept]
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - ./agents/souscription:/home/agent/workspace:ro
       - ./security/mcp-allowlist.json:/home/agent/mcp-allowlist.json:ro
       - hermes_uw_home:/home/agent/.hermes
     environment:
-      OLLAMA_HOST: ${OLLAMA_HOST}
+      <<: *hermes-env
       OLLAMA_MODEL: ${OLLAMA_MODEL_PRIMARY}
       AGENT_ROLE: souscription
-    depends_on: [redis]
+      MEMORY_DEPARTEMENT: souscription
+      AGENT_NPUB: ${AGENT_NPUB_SOUSCRIPTION:-}
+      AGENT_NSEC: ${AGENT_NSEC_SOUSCRIPTION:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+      presidio-analyzer:
+        condition: service_started
+      buzz-hermes-bridge:
+        condition: service_started
 
   agent-sinistres-contentieux:
+    <<: *hermes-agent
     build:
-      context: ./agents/sinistres-contentieux
+      context: .
+      dockerfile: agents/sinistres-contentieux/Dockerfile
     container_name: toto-agent-sinistres
-    restart: unless-stopped
     networks: [net-dept, net-external]
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - ./agents/sinistres-contentieux:/home/agent/workspace:ro
       - ./security/mcp-allowlist.json:/home/agent/mcp-allowlist.json:ro
       - hermes_claims_home:/home/agent/.hermes
     environment:
-      OLLAMA_HOST: ${OLLAMA_HOST}
+      <<: *hermes-env
       OLLAMA_MODEL: ${OLLAMA_MODEL_FALLBACK}
-      HERMES_ESCALATION_THRESHOLD_EUR: ${HERMES_ESCALATION_THRESHOLD_EUR}
       AGENT_ROLE: sinistres-contentieux
-    depends_on: [mailhog, rocketchat]
+      MEMORY_DEPARTEMENT: sinistres-contentieux
+      AGENT_NPUB: ${AGENT_NPUB_SINISTRES:-}
+      AGENT_NSEC: ${AGENT_NSEC_SINISTRES:-}
+    depends_on:
+      mailhog:
+        condition: service_healthy
+      buzz-hermes-bridge:
+        condition: service_started
 
-# Note : ollama, mcp-presidio, mcp-macro-wrapper, gamification-engine, twenty-crm
-# et les 5 autres agents (finance, support, marketing, rh, conformite-it) sont
-# volontairement absents de cette version lite. Les ajouter progressivement
-# en fusionnant avec docker-compose.yml une fois le pipeline validé.
+# Note : ollama reste natif sur l'hôte Windows. Le profil complet
+# (docker-compose.yml) ajoute les 4 agents restants (finance, support-client,
+# marketing, conformite-it) + nats en profil optionnel ; twenty-crm est
+# documenté comme optionnel Phase-2 (voir README). Le service rh est
+# volontairement hors périmètre (pas de Dockerfile départemental).
+# Voir docs/NETWORKING.md pour la matrice réseaux/ports.

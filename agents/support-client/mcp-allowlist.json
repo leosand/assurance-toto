@@ -1,0 +1,1 @@
+{"commentaire":"support-client — least-privilege : tickets niveau 1, résiliation. Lecture client/contrat, emails via mailhog.","mcp_servers":["mcp-postgres","mailhog","searxng"],"tools":["lire_client","lire_contrat","creer_ticket","traiter_resiliation","consulter_memoire"],"notes":"mcp-postgres read-only. Escalade niveau 2 obligatoire au-delà du seuil d'autonomie."}

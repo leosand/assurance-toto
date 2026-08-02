@@ -1,0 +1,6 @@
+{
+  "commentaire": "souscription — analyse de risque + grille tarifaire, anonymisation des pièces.",
+  "mcp_servers": ["mcp-postgres", "presidio"],
+  "tools": ["calculer_prime", "evaluer_risque", "lire_client", "lire_contrat", "consulter_memoire"],
+  "notes": "Presidio pour anonymiser les justificatifs avant LLM. Pas de règlement, pas d'écriture contrat (recommandation seulement)."
+}
