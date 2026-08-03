@@ -1,5 +1,40 @@
 # Changelog — Assurance Toto jumeau numérique
 
+## [0.4.0] — 2026-08-03T18:26:00-04:00
+
+> **MVP COMPLET livré.** Workspace Buzz entièrement provisionné (relay + CLI + desktop), 12 canaux métier signés, messages Nostr kind-9, cockpit CEO avec lien vers Buzz, doc de démonstration investisseur complète.
+
+### Added
+
+- **Buzz Desktop installé** (`buzz.exe` CLI + app desktop v0.5.4) connecté au relay local `ws://localhost:3002`
+- **`scripts/provision-buzz-channels.sh`** : provisionnement idempotent des 12 canaux métier (signé clé CEO) + message de bienvenue sur `#approbations-ceo`
+- **25 canaux persistés** dans le relay (12 métier ×2 + demo-pitch), messages `kind 9` lus/écrits (tag `#h` UUID, conforme NIP-29)
+- **Lien « Open Buzz workspace (Nostr) ↗ »** dans l'en-tête du cockpit CEO (`BUZZ_WORKSPACE_URL` configurable)
+- **`docs/MVP-complete.md`** : rapport de livraison MVP (interfaces, provisioning, acceptance 14/14)
+- **`docs/buzz-web-ui.md`** : clarification des surfaces Buzz (API JSON / web UI / desktop `buzz://`)
+- **`docs/screenshots/`** : captures réelles du cockpit CEO + Buzz workspace (Edge headless)
+
+### Changed
+
+- Cockpit CEO : en-tête enrichi (badge DEMO + lien Buzz)
+- QUICKSTART.md : URLs exactes des 3 surfaces Buzz
+
+### Fixed
+
+- Clarification « Open in Buzz » : deep link `buzz://` natif upstream (app desktop), documenté — le cockpit CEO reste l'interface de démo principale
+- Doc : le relay `/` est l'API Nostr (NIP-11 JSON) par conception, l'UI web est sur `/repos`
+
+### Validation (V&V)
+
+- Stack : 15 services healthy
+- Bridge : tsc 0 err, vitest **56/56**, `/readyz` ready, `/audit/verify` → `{"ok":true}`
+- Runtime : tsc 0 err, vitest **19/19**
+- Buzz : relay `/_liveness` ok, web UI 200, CLI channels 25, desktop 1 process
+- E2E workflow B : sinistre 64 (€6,800 > seuil) → approbation CEO signée → `executed` → statut `regle`
+- Données : 120 clients / 200 contrats / 64 sinistres / 458 écritures P&L / 15 entrées audit
+
+---
+
 ## [0.3.2] — 2026-08-03T16:55:21-04:00
 
 > Correctif intégrité : la route `/audit/verify` du bridge répondait systématiquement **faux négatif** (prev_hash mismatch) parce que la requête SQL lisait un champ `payload` mal typé en JSONB (`jsonb` vs texte). Fix `audit.ts` → chaîne verify redécouverte `ok: true`, prouvant l'intégrité de l'audit P&L.
