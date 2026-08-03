@@ -94,6 +94,9 @@ export async function buildServer(cfg: BridgeConfig, overrides?: { repo?: Reposi
 
   const deps: PipelineDeps = { repo, adapter, dlq, metrics, logger, cfg, ceoPubkeysHex, allowedUnsignedRolesHex };
 
+  // Human-friendly landing: `/` → CEO cockpit.
+  app.get('/', async (_req, reply) => reply.redirect('/dashboard'));
+
   app.get('/healthz', () => ({ status: 'ok' }));
 
   // ---------- Cockpit CEO (ADR-002 — cockpit lean, 100 % lecture Postgres) ----------

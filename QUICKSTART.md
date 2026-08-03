@@ -98,9 +98,9 @@ curl -s http://localhost:3100/readyz
 | Interface | URL | Purpose |
 |---|---|---|
 | **CEO cockpit** (dashboard) | http://localhost:3100/dashboard | P&L, sales pipeline, pending CEO approvals, audit timeline, kill-switch |
-| **Buzz workspace** | http://localhost:3002 | Nostr-based team/agent channels, signed events |
+| **Buzz workspace** | http://localhost:3002/repos | Nostr-based team/agent channels, signed events (web UI served at `/repos`) |
 | **Buzz health** | http://localhost:8081 | relay liveness/readiness |
-| **Bridge API** | http://localhost:3100 | `/commands`, `/approvals`, `/metrics` |
+| **Bridge API** | http://localhost:3100 | `/` → cockpit, `/commands`, `/approvals`, `/metrics`, `/healthz`, `/readyz` |
 | **Postgres** | `localhost:5434` | schema v2 (credentials in `.env`) |
 | **Gitea** | http://localhost:3010 | local Git (skills, changelog) |
 | **MailHog** | http://localhost:8025 | simulated email |

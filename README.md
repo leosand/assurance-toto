@@ -91,7 +91,7 @@ docker compose -f docker-compose.lite.yml up -d
 ### Local endpoints
 
 - **CEO dashboard (lean cockpit)**: http://localhost:3100/dashboard
-- **Buzz workspace** (relay + web UI): http://localhost:3002 (`RELAY_OWNER_PUBKEY` = CEO, generated at bootstrap)
+- **Buzz workspace** (relay + web UI): http://localhost:3002/repos (`RELAY_OWNER_PUBKEY` = CEO, generated at bootstrap; the relay serves its web UI at `/repos` — `/` is the Nostr API endpoint)
 - **Bridge API**: http://localhost:3100 (`/commands`, `/approvals`, `/healthz`, `/readyz`, `/metrics`)
 - **Buzz Admin API**: http://localhost:8081 (`/health`, `/_liveness`, `/_readiness`)
 - **Postgres**: localhost:5432 (credentials in `.env`)
