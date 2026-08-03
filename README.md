@@ -54,6 +54,8 @@ CEO/Ops ──► Buzz (:3002 web + relay :8080 API) ──► buzz-hermes-bridg
 
 ## Quick start — Windows 11 + WSL2 (lite mode)
 
+> 📄 **Full guide : [QUICKSTART.md](QUICKSTART.md)** — prerequisites, secrets generation, launch, verify, demo, reset, troubleshooting.
+
 ```bash
 # 1) environment variables
 cp .env.example .env

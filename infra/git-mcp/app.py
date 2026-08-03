@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-\"\"\"infra/git-mcp/app.py — Wrapper MCP minimal pour committer automatiquement vers Gitea local.\"\"\"
+"""infra/git-mcp/app.py — Minimal MCP wrapper to auto-commit to the local Gitea repo."""
 import os
 import subprocess
 from fastapi import FastAPI, Request
