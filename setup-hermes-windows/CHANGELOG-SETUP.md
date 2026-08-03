@@ -15,7 +15,7 @@
 ## [1.0.1] — 2026-07-24
 
 ### Changed & Fixed
-- **Ollama Models** : Aligned on `qwen2.5-coder:7b` (primary) and `gemma4-12b` (fallback).
+- **Ollama Models** : Aligned on `qwen2.5-coder:7b` (primary) and `gemma4:e4b` (fallback). # was: gemma4-12b
 - **`docker-compose.lite.yml`** : Removed the unresolved external dependency `mcp-postgres` from the agents so they can start cleanly without a remote image pull error.
 - **`INSTALL-WINDOWS11.md`** : Fixed the initialization sequence in step 7 (removed the blocking seed script and deleted the `mcp-postgres` parameter).
 

@@ -114,7 +114,7 @@ cp .env.example .env
 `.env`,
 
 OLLAMA_MODEL_PRIMARY=qwen2.5-coder:7b
-OLLAMA_MODEL_FALLBACK=gemma4-12b
+OLLAMA_MODEL_FALLBACK=gemma4:e4b # was: gemma4-12b
 OLLAMA_CONTEXT_SIZE=32768
 OLLAMA_HOST=http://host.docker.internal:11434
 

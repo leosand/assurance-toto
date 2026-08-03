@@ -2,7 +2,7 @@
 # Teste si le modèle local tient un contexte de 32K/64K tokens sans erreur ni lenteur excessive
 
 param(
-    [string]$Model = "qwen2.5:7b",
+    [string]$Model = "gemma4:e4b", # was: "qwen2.5:7b"
     [int]$ContextSize = 32768
 )
 

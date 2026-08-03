@@ -20,17 +20,17 @@ Then reopen Ubuntu.
 ## Hermes rejects tasks / "context too small" error
 The Ollama context is too low. Check with:
 ```powershell
-ollama show qwen2.5:7b --modelfile
+ollama show gemma4:e4b --modelfile # was: qwen2.5:7b
 ```
 Look for `PARAMETER num_ctx`. If it's below 32768, force it via the `OLLAMA_CONTEXT_LENGTH=32768` environment variable before restarting `ollama serve`, or create a custom Modelfile:
 ```
-FROM qwen2.5:7b
+FROM gemma4:e4b # was: qwen2.5:7b
 PARAMETER num_ctx 32768
 ```
 ```powershell
-ollama create qwen2.5-32k -f Modelfile
+ollama create gemma4-32k -f Modelfile # was: qwen2.5-32k
 ```
-Then use `qwen2.5-32k` as `OLLAMA_MODEL_PRIMARY` in `.env`.
+Then use `gemma4-32k` as `OLLAMA_MODEL_PRIMARY` in `.env`. # was: qwen2.5-32k
 
 ## Hermes agents are very slow / the PC becomes unusable
 You probably launched too many agents at once with a single 7-8B model that processes requests one by one. Solution:
@@ -44,7 +44,7 @@ On Docker Desktop for Windows, this DNS name is resolved automatically. If it fa
 ## Ollama eats all the RAM even when seemingly stopped
 ```powershell
 ollama ps
-ollama stop qwen2.5:7b
+ollama stop gemma4:e4b # was: qwen2.5:7b
 ```
 Unloads the model from memory between work sessions.
 
