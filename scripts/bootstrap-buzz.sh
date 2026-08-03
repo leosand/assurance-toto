@@ -128,6 +128,12 @@ CHANNELS=(ceo-command ceo-digest approbations-ceo sales-acquisition \
   marketing-veille conformite-rgpd securite-incidents simulation-events)
 log_info "Expected channels (created on 1st kind:9 by the bridge): ${CHANNELS[*]}"
 
+# Generate a buzz://connect deep link for the workspace (Buzz desktop app ready).
+# This lets a human operator scan or click to connect the desktop app to the local relay.
+B64_LINK="$(printf 'buzz://connect?relay=ws://localhost:3002' | base64 -w 0)"
+log_ok "Buzz deep link (scan/click) : buzz://connect?relay=ws://localhost:3002"
+
+
 # ---------- 5. npub → role summary ----------
 banner "Mapping npub → role (to copy into .env.runtime via init-agents-env.sh)"
 for role in "${ROLES[@]}"; do
