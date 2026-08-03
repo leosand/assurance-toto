@@ -98,7 +98,8 @@ curl -s http://localhost:3100/readyz
 | Interface | URL | Purpose |
 |---|---|---|
 | **CEO cockpit** (dashboard) | http://localhost:3100/dashboard | P&L, sales pipeline, pending CEO approvals, audit timeline, kill-switch |
-| **Buzz workspace** | http://localhost:3002/repos | Nostr-based team/agent channels, signed events (web UI served at `/repos`) |
+| **Buzz relay API** | http://localhost:8081 | Nostr relay health (`/_liveness`, `/_readiness`) |
+| **Buzz web UI** (repos view) | http://localhost:3002/repos | Relay SPA (Repositories view). Full channel workspace = Buzz desktop app (`buzz://`) — see [docs/buzz-web-ui.md](docs/buzz-web-ui.md) |
 | **Buzz health** | http://localhost:8081 | relay liveness/readiness |
 | **Bridge API** | http://localhost:3100 | `/` → cockpit, `/commands`, `/approvals`, `/metrics`, `/healthz`, `/readyz` |
 | **Postgres** | `localhost:5434` | schema v2 (credentials in `.env`) |

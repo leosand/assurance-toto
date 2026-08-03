@@ -121,6 +121,7 @@ export async function buildServer(cfg: BridgeConfig, overrides?: { repo?: Reposi
       const html = await renderDashboard({
         snapshot: () => repo.dashboardSnapshot(),
         ceoPubkey: ceoPubkeyForm,
+        buzzWorkspaceUrl: process.env['BUZZ_WORKSPACE_URL'] ?? 'http://localhost:3002/repos',
         ...(q.correlation_id !== undefined && q.correlation_id !== '' ? { highlight: q.correlation_id } : {}),
         ...(q.msg !== undefined && q.msg !== '' ? { notice: q.msg } : {}),
       });

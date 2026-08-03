@@ -18,6 +18,8 @@ export interface DashboardParams {
   /** Message displayed after an action (e.g. ?decided=12345). */
   notice?: string;
   generatedAt?: Date;
+  /** Buzz workspace URL shown in the header ("Open Buzz workspace"). */
+  buzzWorkspaceUrl?: string;
 }
 
 const esc = (s: unknown): string =>
@@ -297,6 +299,11 @@ export async function renderDashboard(p: DashboardParams): Promise<string> {
   <h1>Assurance Toto — Cockpit CEO</h1>
   <p class="sub">DEMO environment · 100% synthetic data · generated on ${esc(fmtDate(generatedAt.toISOString()))} (auto-refresh 30 s)</p>
   <span class="badge-demo">DEMO environment — synthetic data only</span>
+  <p style="margin-top:10px">
+    <a href="${esc(p.buzzWorkspaceUrl ?? 'http://localhost:3002/repos')}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;border:1px solid var(--accent);border-radius:6px;padding:4px 12px;font-size:12px">
+      Open Buzz workspace (Nostr) ↗
+    </a>
+  </p>
 </header>
 ${p.notice !== undefined && p.notice !== '' ? `<div class="notice">${esc(p.notice)}</div>` : ''}
 <div class="grid">
