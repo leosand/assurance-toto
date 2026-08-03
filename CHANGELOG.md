@@ -1,5 +1,40 @@
 # Changelog — Assurance Toto jumeau numérique
 
+## [0.3.0] — 2026-08-03T12:45:00-04:00
+
+> V&V complète, containerisation totale (8 agents + bridge), nettoyage repo. Toutes les images buildées, stack prouvée E2E sur machine locale.
+
+### Validation & Verification (V&V) — tous verts
+
+- **Bridge** : `tsc` 0 erreur, vitest **56/56**
+- **Runtime Hermes** : `tsc` 0 erreur, vitest **19/19**
+- **Stack lite vivante** : 15 conteneurs up, postgres/redis/buzz/presidio healthy, `readyz` = `{pg:ok, buzz:ok, ready}`
+- **Workflow B E2E** : sinistre ≤ seuil → auto-settle `executed` (statut `regle`), sinistre > seuil → approbation CEO signée → `executed`
+- **Audit** : `GET /audit/verify` → `{"ok":true}` (chaîne SHA-256 intacte)
+- **Kill-switch** : activation/désactivation CEO testée
+- **Dashboard** : HTTP 200, labels 100% anglais (Net result, Sales pipeline, Claims, Pending CEO approvals…)
+
+### Containerisation complète
+
+- **8 agents Hermes** : images `assurance-toto-agent-*` 211 MB chacune (orchestrateur, sales, souscription, sinistres-contentieux, finance, support-client, marketing, conformite-it)
+- **Bridge** : image `assurance-toto-lite-buzz-hermes-bridge` 268 MB
+- **mcp-git** : 367 MB
+- Compose lite (21 services) + full (26 services) : `config -q` OK
+- Taille totale images projet ≈ 2,6 GB (allégé de ~12,7 GB après suppression des reliques)
+
+### Nettoyage repo
+
+- Supprimé : 3 zips legacy (`assurance-toto*.zip`, non trackés), `hermes.dockerfile` racine (obsolète — Dockerfiles par agent), reliques `.aider*` (cache + historique), 4 images 3,17 GB du faux-hermes
+- Supprimé du disque : conteneurs résiduels `toto-rocketchat` / `toto-mongo` (obsolètes depuis l'arrivée de Buzz)
+- Corrigé : tag `searxng/searxng:2024.12.14` → `latest` (le tag épinglé n'existe plus), port Gitea paramétrable `${GITEA_PORT:-3010}` (3000 occupé localement)
+- Régénéré `.env` : secrets aléatoires + paires Nostr Schnorr cohérentes (CEO + 8 agents) — aucun secret commité
+
+### Removed
+
+- `hermes.dockerfile` (racine) — chaque agent a son propre Dockerfile via `agents/_runtime`
+
+---
+
 ## [0.2.0] — 2026-08-03T01:38:55-04:00
 
 > Traduction complète vers l'anglais (i18n) et durcissement production du dépôt. Push GitHub en « main » avec historique purgé (`.env` retiré, aucun secret en clair).
