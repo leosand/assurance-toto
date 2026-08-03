@@ -18,7 +18,7 @@ export function computeAuditHash(prevHash: string, payload: unknown): string {
   return createHash('sha256').update(prevHash + canonical, 'utf8').digest('hex');
 }
 
-/** Appends an entry; assumes enqueue is serialized (app-level lock). */
+/** Appends an entry; assumes enqueue serialized (app-level lock). */
 export async function appendAudit(repo: Repository, entry: AuditEntry): Promise<{ hash: string; prevHash: string }> {
   const prevHash = await readLastHash(repo);
   const hash = computeAuditHash(prevHash, entry.payload);
@@ -27,13 +27,10 @@ export async function appendAudit(repo: Repository, entry: AuditEntry): Promise<
 }
 
 async function readLastHash(repo: Repository): Promise<string> {
-  // The repo exposes a "last hash" accessor via a dedicated pg query.
-  // In memory, the test repo can provide it, but we go through the common API:
-  // we read the last entry via inTransaction (no writes) to remain agnostic.
   const prev: string[] = [];
   await repo.inTransaction(async (tx: Tx) => {
     const r = await tx.query<{ hash: string }>(
-      "SELECT hash FROM audit_log ORDER BY seq DESC LIMIT 1",
+      'SELECT hash FROM audit_log ORDER BY seq DESC LIMIT 1',
       [],
     );
     if (r.rows[0] !== undefined) prev.push(String(r.rows[0].hash));
@@ -44,10 +41,10 @@ async function readLastHash(repo: Repository): Promise<string> {
 
 /** Offline verification: full chain re-check. */
 export async function verifyAuditChain(repo: Repository): Promise<{ ok: boolean; brokenAt?: number; reason?: string }> {
-  const rows: { seq: number; prev_hash: string | null; hash: string; payload: string }[] = [];
+  const rows: Array<{ seq: number; prev_hash: string | null; hash: string; payload: string }> = [];
   await repo.inTransaction(async (tx: Tx) => {
-    const r = await tx.query<{ seq: string; prev_hash: string | null; hash: string; payload: unknown }>(
-      'SELECT seq::text AS seq, prev_hash, hash, payload::text AS payload FROM audit_log ORDER BY seq ASC',
+    const r = await tx.query<{ seq: number; prev_hash: string | null; hash: string; payload: unknown }>(
+      'SELECT seq, prev_hash, hash, payload FROM audit_log ORDER BY seq ASC',
       [],
     );
     for (const row of r.rows) {
@@ -79,7 +76,7 @@ export async function verifyAuditChain(repo: Repository): Promise<{ ok: boolean;
 
 function parseJson(text: string): unknown {
   try {
-    return JSON.parse(text) as unknown;
+    return JSON.parse(text);
   } catch {
     return text;
   }

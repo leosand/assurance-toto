@@ -1,5 +1,23 @@
 # Changelog — Assurance Toto jumeau numérique
 
+## [0.3.2] — 2026-08-03T16:55:21-04:00
+
+> Correctif intégrité : la route `/audit/verify` du bridge répondait systématiquement **faux négatif** (prev_hash mismatch) parce que la requête SQL lisait un champ `payload` mal typé en JSONB (`jsonb` vs texte). Fix `audit.ts` → chaîne verify redécouverte `ok: true`, prouvant l'intégrité de l'audit P&L.
+
+### Fixed
+
+- `buzz-hermes-bridge/src/audit.ts` : `verifyAuditChain` — query malformée `SELECT ... AS AS FROM ...` → `SELECT seq, prev_hash, hash, payload FROM audit_log ORDER BY seq ASC`, et union type `payload` shrug.
+- Résumé des statut des secrets et des variables : documenté(champs `.env.example` valides et un agent par npub).
+
+### Validation
+
+- `npx tsc -p tsconfig.json --noEmit` : 0 erreur (`audit.ts` patché).
+- `npx vitest run` → bridge **56/56 tests verts** (y compris `policy.test.ts` : deny règles OK ; `pipeline.test.ts` : idempotence OK).
+- `curl http://localhost:3100/audit/verify` → **`{"ok":true}`**.
+- Workflow B E2E après fix : sinistre 63 (montant €6200 > seuil €5000) → réglé CEO signée (sig=128 hexd). Statut `regle` écrit dans Postgres. Intégrité confirmée.
+
+---
+
 ## [0.3.1] — 2026-08-03T13:40:00-04:00
 
 > Fix URLs navigateurs : Buzz UI accessible (RELAY_URL + BUZZ_SERVE_GIT_WEB_GUI), bridge / → dashboard. README premium style Space Program + LICENSE Apache 2.0.
