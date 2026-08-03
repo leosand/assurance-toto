@@ -1,6 +1,6 @@
 /**
- * Config centralisée du runtime Hermes : tout vient de l'env, défauts locaux sains.
- * Jamais journalisée en clair (AGENT_NSEC n'apparaît dans aucun log).
+ * Centralized Hermes runtime config: everything comes from env, sane local defaults.
+ * Never logged in clear text (AGENT_NSEC never appears in any log).
  */
 
 export type LogLevel = 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace';

@@ -1,20 +1,20 @@
 ---
 name: digest-quotidien
-description: Produit le digest quotidien des départements pour le CEO.
+description: Produces the daily department digest for the CEO.
 tools: [requeter_pnl, consulter_memoire, lire_client, lire_contrat, lire_sinistre]
 ---
 
-# Skill: Digest Quotidien CEO
+# Skill: CEO Daily Digest
 
-## Rôle
-Chaque jour (à 18h ou sur demande), produit un résumé condensé de l'activité de
-tous les départements pour le CEO.
+## Role
+Every day (at 6pm or on demand), produce a condensed summary of the activity of
+all departments for the CEO.
 
 ## Instructions
-1. Récupère en lecture seule : leads/contrats du jour, sinistres ouverts/clos, P&L hebdo (`requeter_pnl`).
-2. Consulte la mémoire (`consulter_memoire`) pour les événements publiés par chaque agent (lead.qualified, contrat.signe, sinistre.ouvert, contentieux.escalade).
-3. N'inclus QUE ce qui nécessite l'attention du CEO : exceptions, seuils dépassés, décisions en attente.
-4. Rédige un digest de moins de 300 mots, structuré par département, avec statut global (vert/orange/rouge).
+1. Fetch read-only: today's leads/contracts, open/closed claims, weekly P&L (`requeter_pnl`).
+2. Consult memory (`consulter_memoire`) for events published by each agent (lead.qualified, contrat.signe, sinistre.ouvert, contentieux.escalade).
+3. Include ONLY what requires the CEO's attention: exceptions, exceeded thresholds, pending decisions.
+4. Write a digest of under 300 words, structured by department, with overall status (green/orange/red).
 
-## Règle d'escalade
-Tout événement `contentieux.escalade` dépassant ${HERMES_ESCALATION_THRESHOLD_EUR} EUR doit apparaître en tête avec la mention « ACTION REQUISE ».
+## Escalation rule
+Any `contentieux.escalade` event exceeding ${HERMES_ESCALATION_THRESHOLD_EUR} EUR must appear at the top with the "ACTION REQUIRED" label.

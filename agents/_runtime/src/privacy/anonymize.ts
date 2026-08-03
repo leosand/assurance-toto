@@ -1,12 +1,12 @@
 /**
- * Anonymisation PII avant tout texte envoyé au LLM ou renvoyé vers l'extérieur.
+ * PII anonymization before any text sent to the LLM or returned outside.
  *
- * Chemin nominal : Presidio (`POST /analyze` puis `POST /anonymize` sur l'anonymizer
- * dérivé de PRESIDIO_URL, ou `PRESIDIO_ANONYMIZER_URL` si défini).
- * Fallback : stub regex local (email, téléphones FR/intl, IBAN, NIR sécu FR) —
- * utilisé si Presidio est injoignable, avec un `warn` structuré.
+ * Nominal path: Presidio (`POST /analyze` then `POST /anonymize` on the anonymizer
+ * derived from PRESIDIO_URL, or `PRESIDIO_ANONYMIZER_URL` if defined).
+ * Fallback: local regex stub (email, FR/intl phones, IBAN, French SSN NIR) —
+ * used if Presidio is unreachable, with a structured `warn`.
  *
- * AUCUN contenu brut n'est journalisé (risque PII) : seuls compteurs et warnings.
+ * NO raw content is ever logged (PII risk): only counters and warnings.
  */
 import type { Logger } from 'pino';
 
@@ -30,7 +30,7 @@ export interface AnonymizerDeps {
 const ANALYZER_PORT_FROM = ':3000';
 const ANONYMIZER_PORT_TO = ':3001';
 
-/** Regex locales (fallback) — ordre : le plus spécifique d'abord (IBAN/NIR avant téléphone). */
+/** Local regexes (fallback) — order: most specific first (IBAN/NIR before phone). */
 const PII_PATTERNS: ReadonlyArray<{ re: RegExp; label: string }> = [
   { re: /\b[A-Z]{2}\d{2}(?:[ ]?\d{4}){3,6}\b/g, label: 'IBAN' },
   { re: /\b[12][ .]?\d{2}[ .]?(?:0[1-9]|1[0-2])[ .]?\d{2}[ .]?\d{3}[ .]?\d{3}(?:[ .]?\d{2})?\b/g, label: 'NIR' },
@@ -83,7 +83,7 @@ export function createAnonymizer(deps: AnonymizerDeps): Anonymizer {
     });
     if (!anonymizeResp.ok) throw new Error(`presidio anonymize HTTP ${anonymizeResp.status}`);
     const result = (await anonymizeResp.json()) as { text?: string };
-    if (typeof result.text !== 'string') throw new Error('presidio anonymize: réponse invalide');
+    if (typeof result.text !== 'string') throw new Error('presidio anonymize: invalid response');
     return result.text;
   }
 
@@ -92,11 +92,11 @@ export function createAnonymizer(deps: AnonymizerDeps): Anonymizer {
       try {
         return await viaPresidio(text);
       } catch {
-        // Fallback local : critique si la donnée irait au LLM sans anonymisation.
+      // Local fallback: critical if the data would reach the LLM without anonymization.
         const { text: masked, redactions } = fallbackMask(text);
         deps.logger.warn(
           { action: 'anonymize.fallback_regex', redactions },
-          'Presidio injoignable — anonymisation regex de secours',
+          'Presidio unreachable — fallback regex anonymization',
         );
         return masked;
       }
@@ -105,15 +105,15 @@ export function createAnonymizer(deps: AnonymizerDeps): Anonymizer {
 }
 
 /**
- * Garde-fou : détecte des PII résiduelles (email/téléphone/IBAN/NIR) dans un
- * texte sur le point d'être expédié. Ne lève pas — le runtime applique un
- * dernier masquage de secours à la place.
+ * Guardrail: detects residual PII (email/phone/IBAN/NIR) in a text about
+ * to be shipped out. Does not throw — the runtime applies a last-resort
+ * scrub instead.
  */
 export function assertNoPii(text: string): boolean {
   return PII_PATTERNS.some(({ re }) => new RegExp(re.source, re.flags).test(text));
 }
 
-/** Dernier rideau : masque tout ce qui reste avant sortie. */
+/** Last curtain: masks whatever remains before output. */
 export function finalScrub(text: string): string {
   return fallbackMask(text).text;
 }

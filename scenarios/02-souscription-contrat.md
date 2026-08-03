@@ -1,9 +1,9 @@
-# Scénario 02 — Souscription de Contrat
+# Scenario 02 — Policy Underwriting
 
 ## Injection
-Injecter à `agent-souscription` : "Traite tous les leads qualifiés en attente, applique la grille tarifaire officielle, et émets les contrats pour les profils standards. Escalade les profils atypiques au CEO."
+Inject into `agent-souscription`: "Process all pending qualified leads, apply the official pricing grid, and issue contracts for standard profiles. Escalate atypical profiles to the CEO."
 
-## Résultat attendu
-- Contrats créés en base (table `contrats`, statut='actif')
-- Événement `contrat.signe` publié → notification Finance pour facturation
-- Cas atypiques (bonus-malus élevé, véhicule sportif jeune conducteur) placés en attente CEO
+## Expected outcome
+- Contracts created in the database (table `contrats`, statut='actif')
+- `contrat.signe` event published → Finance notification for billing
+- Atypical cases (high no-claims bonus/malus, sports car with young driver) placed in CEO pending queue

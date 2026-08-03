@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# scripts/bootstrap-buzz.sh — Bootstrap du sous-système Buzz (idempotent).
+# scripts/bootstrap-buzz.sh — Bootstrap of the Buzz subsystem (idempotent).
 #
-# Fait, dans l'ordre :
-#   1. Attend que le relais buzz réponde sur /health (port hôte 3002).
-#   2. Génère les keypairs Nostr (CEO + 4 agents MVP) — par défaut avec
-#      `buzz-admin generate-key` exec'té dans le conteneur buzz ; repli local
-#      sur openssl si buzz-admin n'existe pas dans l'image.
-#   3. Écrit/rafraîchit `.env.buzz` (gitignored, chmod 600) à la racine du repo.
-#   4. Enregistre chaque npub via `buzz-admin add-member` (idempotent).
-#   5. Canaux : buzz-admin n'a PAS de sous-commande create-channel (voir
-#      docs/OPERATOR.md §Buzz). Buzz crée donc les canaux à la 1re message
-#      kind:9 portée par le bridge — ce script vérifie seulement que le relais
-#      les expose, et affiche le câblage vers init-agents-env.sh.
+# Does, in order:
+#   1. Wait for the buzz relay to answer on /health (host port 3002).
+#   2. Generate the Nostr keypairs (CEO + 4 MVP agents) — by default with
+#      `buzz-admin generate-key` in the buzz container; local fallback
+#      on openssl if buzz-admin does not exist in the image.
+#   3. Write/refresh `.env.buzz` (gitignored, chmod 600) at the repo root.
+#   4. Register each npub via `buzz-admin add-member` (idempotent).
+#   5. Channels: buzz-admin has NO create-channel sub-command (see
+#      docs/OPERATOR.md §Buzz). Buzz instead creates channels on the 1st
+#      kind:9 message carried by the bridge — this script only verifies that the relay
+#      exposes them, and displays the linkage to init-agents-env.sh.
 #
-# Usage : ./scripts/bootstrap-buzz.sh [--reuse]
-#   --reuse : réutilise un .env.buzz existant sans regénérer les clés.
+# Usage: ./scripts/bootstrap-buzz.sh [--reuse]
+#   --reuse : reuse an existing .env.buzz without regenerating the keys.
 
 set -euo pipefail
 
@@ -31,40 +31,40 @@ BUZZ_CONTAINER="${BUZZ_CONTAINER:-buzz}"
 REUSE=0
 [ "${1:-}" = "--reuse" ] && REUSE=1
 
-banner "bootstrap-buzz — relais $BUZZ_HEALTH_URL"
+banner "bootstrap-buzz — relay $BUZZ_HEALTH_URL"
 
-# ---------- 1. Attendre le relais ----------
-log_info "Attente du relais buzz…"
+# ---------- 1. Wait for the relay ----------
+log_info "Waiting for the buzz relay…"
 if ! wait_http "$BUZZ_HEALTH_URL" 90 200; then
-  die "Le relais buzz ne répond pas. Démarre d'abord : ${COMPOSE_FILE} up -d buzz (avec postgres-buzz, redis, minio-init)."
+  die "The buzz relay is not answering. Start first: ${COMPOSE_FILE} up -d buzz (with postgres-buzz, redis, minio-init)."
 fi
-log_ok "Relais buzz up."
+log_ok "Buzz relay up."
 
-# Vérifie le binaire d'admin dans le conteneur.
+# Verifies the admin binary in the container.
 HAS_BUZZ_ADMIN=0
 if "${DC[@]}" exec -T buzz sh -c 'command -v buzz-admin >/dev/null 2>&1' 2>/dev/null; then
   HAS_BUZZ_ADMIN=1
-  log_ok "buzz-admin trouvé dans le conteneur $BUZZ_CONTAINER."
+  log_ok "buzz-admin found in container $BUZZ_CONTAINER."
 else
-  log_warn "buzz-admin absent de l'image — repli sur openssl pour les clés (hex Nostr valides, 64 chars)."
+  log_warn "buzz-admin absent from the image — fall back to openssl for keys (valid Nostr hex, 64 chars)."
 fi
 
-# ---------- 2. Génération / réutilisation des keypairs ----------
+# ---------- 2. Generation / reuse of keypairs ----------
 ROLES=(CEO AGENT_ORCHESTRATEUR AGENT_SALES AGENT_SOUSCRIPTION AGENT_SINISTRES)
 
 gen_hex_keypair() {
-  # Affiche "priv64hex pub64hex". pubkey Nostr (schnorr) ≠ sha256(priv) en
-  # cryptographie réelle ; pour la démo locale (bridge en mode
-  # BRIDGE_REQUIRE_SIGNED_COMMANDS=false) la valeur *déclarative* de l'npub
-  # suffit : on génère donc priv=rand(32o), pub=sha256(priv) — déterministe et
-  # unique par keypair.
+  # Prints "priv64hex pub64hex". Nostr pubkey (schnorr) ≠ sha256(priv) in
+  # real cryptography; for the local demo (bridge in mode
+  # BRIDGE_REQUIRE_SIGNED_COMMANDS=false) the *declarative* value of the npub
+  # suffices: we therefore generate priv=rand(32o), pub=sha256(priv) — deterministic and
+  # unique per keypair.
   local priv pub
   priv="$(openssl rand -hex 32)"
   pub="$(printf '%s' "$priv" | openssl dgst -sha256 -r | awk '{print $1}')"
   printf '%s %s' "$priv" "$pub"
 }
 
-# via buzz-admin : parse "private: <hex>  public: <hex>" (tolère npub1…/hex64)
+# via buzz-admin: parse "private: <hex>  public: <hex>" (tolerates npub1…/hex64)
 gen_via_buzz_admin() {
   local out priv pub
   out="$("${DC[@]}" exec -T buzz buzz-admin generate-key 2>/dev/null | tr -d '\r')" || return 1
@@ -75,17 +75,17 @@ gen_via_buzz_admin() {
 }
 
 if [ "$REUSE" -eq 1 ] && [ -f "$ENV_BUZZ" ]; then
-  log_info "--reuse : conservation de $ENV_BUZZ"
+  log_info "--reuse : keeping $ENV_BUZZ"
 else
   : >"$ENV_BUZZ.tmp"
-  printf '# .env.buzz — généré le %s par scripts/bootstrap-buzz.sh — NE PAS COMMITTER\n' "$(now_iso)" >>"$ENV_BUZZ.tmp"
+  printf '# .env.buzz — generated on %s by scripts/bootstrap-buzz.sh — DO NOT COMMIT\n' "$(now_iso)" >>"$ENV_BUZZ.tmp"
   for role in "${ROLES[@]}"; do
     priv=''; pub=''
     if [ "$HAS_BUZZ_ADMIN" -eq 1 ]; then
       if pair="$(gen_via_buzz_admin)"; then
         priv="${pair%% *}"; pub="${pair#* }"
       else
-        log_warn "buzz-admin generate-key: format non reconnu pour $role — repli openssl."
+        log_warn "buzz-admin generate-key: unrecognized format for $role — openssl fallback."
       fi
     fi
     if [ -z "$priv" ]; then
@@ -96,42 +96,42 @@ else
   done
   mv "$ENV_BUZZ.tmp" "$ENV_BUZZ"
   chmod 600 "$ENV_BUZZ" 2>/dev/null || true
-  log_ok "Écrit $ENV_BUZZ (chmod 600)."
+  log_ok "Wrote $ENV_BUZZ (chmod 600)."
 fi
 
 load_env_file "$ENV_BUZZ"
 
-# ---------- 3. add-member dans le relais ----------
+# ---------- 3. add-member in the relay ----------
 if [ "$HAS_BUZZ_ADMIN" -eq 1 ]; then
-  log_info "Enregistrement des membres dans le relais…"
+  log_info "Registering members in the relay…"
   for role in "${ROLES[@]}"; do
     pubvar="${role}_NPUB_HEX"; pub="${!pubvar}"
-    # buzz-admin connaît hex64 OU npub1… ; on envoie brut.
+    # buzz-admin accepts hex64 OR npub1…; we send it raw.
     if "${DC[@]}" exec -T buzz buzz-admin add-member --pubkey "$pub" --role member >/dev/null 2>&1 \
     || "${DC[@]}" exec -T buzz buzz-admin add-member --pubkey "$pub" --role member 2>&1 | grep -qiE 'exist|already|duplicate'; then
       log_ok "add-member $role (${pub:0:12}…)"
     else
-      log_warn "add-member $role : échec non-bloquant (le bridge peut tourner en mode non-signé sans membership relay)."
+      log_warn "add-member $role: non-blocking failure (the bridge can run in unsigned mode without relay membership)."
     fi
   done
 else
-  log_warn "buzz-admin indisponible : étape add-member sautée."
+  log_warn "buzz-admin unavailable: add-member step skipped."
 fi
 
-# ---------- 4. Canaux ----------
-# buzz-admin n'a PAS create-channel (constaté : `buzz-admin --help`).
-# Chemin soutenu : le bridge crée chaque canal à sa 1re émission kind:9.
-# Ici, on ne force rien — run-demo-e2e.sh déclenche les canaux via les
-# commandes métier normales, ce qui reste déterministe (noms = CHANNEL_NAMES).
+# ---------- 4. Channels ----------
+# buzz-admin has NO create-channel (finding: `buzz-admin --help`).
+# Chosen path: the bridge creates each channel on its 1st kind:9 emission.
+# Here, we force nothing — run-demo-e2e.sh triggers the channels via
+# normal business commands, which stays deterministic (names = CHANNEL_NAMES).
 CHANNELS=(ceo-command ceo-digest approbations-ceo sales-acquisition \
   souscription-risque sinistres-contentieux support-client finance-pnl \
   marketing-veille conformite-rgpd securite-incidents simulation-events)
-log_info "Canaux attendus (créés à la 1re kind:9 par le bridge) : ${CHANNELS[*]}"
+log_info "Expected channels (created on 1st kind:9 by the bridge): ${CHANNELS[*]}"
 
-# ---------- 5. Résumé npub → rôle ----------
-banner "Mapping npub → rôle (à coller dans .env.runtime via init-agents-env.sh)"
+# ---------- 5. npub → role summary ----------
+banner "Mapping npub → role (to copy into .env.runtime via init-agents-env.sh)"
 for role in "${ROLES[@]}"; do
   pubvar="${role}_NPUB_HEX"; pub="${!pubvar}"
   printf '  %-22s %s\n' "$role" "$pub"
 done
-log_ok "bootstrap-buzz terminé. Prochaine étape : ./scripts/init-agents-env.sh"
+log_ok "bootstrap-buzz done. Next step: ./scripts/init-agents-env.sh"

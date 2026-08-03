@@ -11,15 +11,15 @@ export interface BridgeConfig {
   buzzPrivateKey?: string;
   /** npubs allowed to act as CEO (comma-separated). */
   bridgeCeoPubkeys: string[];
-  /** Plafond autorisé pour un règlement direct, en EUR. */
+  /** Cap allowed for a direct settlement, in EUR. */
   claimSettlementThresholdEur: number;
-  /** Anti-forgery : exiger un event Nostr signé sur /commands (PRODUCTION = true). */
+  /** Anti-forgery: require a signed Nostr event on /commands (PRODUCTION = true). */
   requireSignedCommands: boolean;
-  /** npub/hex allowlistés sans signature (agents Hermes ; JAMAIS le CEO). */
+  /** npub/hex allowlisted without signature (Hermes agents; NEVER the CEO). */
   allowedUnsignedRoles: string[];
-  /** TTL des approbations en attente, en minutes. */
+  /** Pending approvals TTL, in minutes. */
   approvalTtlMinutes: number;
-  /** Nombre maximal de tentatives avant DLQ. */
+  /** Max attempts before DLQ. */
   dlqMaxAttempts: number;
 }
 
@@ -41,12 +41,12 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): BridgeConfi
       .map((s) => s.trim())
       .filter((s) => s.length > 0),
     claimSettlementThresholdEur: Number(source['CLAIM_SETTLEMENT_THRESHOLD_EUR'] ?? '5000'),
-    // Anti-forgery (brief §6A) : en production, OBLIGATOIRE à true — toute commande
-    // à effet CEO irréversible doit arriver avec un event Nostr vérifié (kind 9).
-    // false ne sert qu'à garder la démo locale utilisable sans WS Nostr en Phase 1.
+    // Anti-forgery (brief §6A): in production, MUST be true — every command
+    // with an irreversible CEO effect must arrive with a verified Nostr event (kind 9).
+    // false only keeps the local demo usable without Nostr WS in Phase 1.
     requireSignedCommands: (readEnv(source, 'BRIDGE_REQUIRE_SIGNED_COMMANDS') ?? 'false') === 'true',
-    // Allowlist des npub/hex d'AGENTS acceptés SANS signature (Phase 1 démo).
-    // Un npub présent dans BRIDGE_CEOPUBKEYS n'y a jamais droit (sinon forge CEO).
+    // Allowlist of AGENT npub/hex accepted WITHOUT signature (Phase 1 demo).
+    // An npub present in BRIDGE_CEOPUBKEYS is never eligible (otherwise CEO forgery).
     allowedUnsignedRoles: (source['BRIDGE_ALLOWED_UNSIGNED_ROLES'] ?? '')
       .split(',')
       .map((s) => s.trim())
@@ -55,12 +55,12 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): BridgeConfi
     dlqMaxAttempts: Number(source['DLQ_MAX_ATTEMPTS'] ?? '3'),
   };
   if (cfg.buzzPrivateKey !== undefined && !/^(nsec1[02-9ac-hj-np-z]+|[0-9a-f]{64})$/.test(cfg.buzzPrivateKey)) {
-    throw new Error('BUZZ_PRIVATE_KEY doit être un nsec1… ou un hex 64 chars');
+    throw new Error('BUZZ_PRIVATE_KEY must be an nsec1… or a 64-char hex');
   }
   return cfg;
 }
 
-/** Config sans secrets — sûre pour les logs de démarrage. */
+/** Config without secrets — safe for startup logs. */
 export function safeConfig(cfg: BridgeConfig): Record<string, unknown> {
   return {
     port: cfg.port,

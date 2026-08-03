@@ -1,54 +1,54 @@
 # AGENTS.md — Assurance Toto
 
-> Projet : Système multi-agents pour l'assurance (démo/preuve de concept).
-> Documentation agent pour Kimi Code.
+> Project: Multi-agent system for insurance (demo/proof of concept).
+> Agent documentation for Kimi Code.
 
 ## Stack
 
-- Agents Docker distincts (orchestrateur, sales, souscription, sinistres-contentieux ; +finance, support-client, marketing, conformite-it dans le profil full)
-- Git MCP, Redis, PostgreSQL (x2), MinIO, Buzz (relais ghcr.io/block/buzz), bridge Buzz↔Hermes, Presidio (via docker-compose.lite.yml)
-- Docker Compose pour l'infrastructure locale
-- Le canal de collaboration est Buzz (Nostr) — Rocket.Chat/MongoDB archivés dans docker-compose.legacy-rocketchat.yml (cf. decisions/ceo-log.md, ADR-001)
+- Distinct Docker agents (orchestrateur, sales, souscription, sinistres-contentieux; +finance, support-client, marketing, conformite-it in the full profile)
+- MCP Git, Redis, PostgreSQL (x2), MinIO, Buzz (relay ghcr.io/block/buzz), Buzz→Hermes bridge, Presidio (via docker-compose.lite.yml)
+- Docker Compose for the local infrastructure
+- The collaboration channel is Buzz (Nostr) — Rocket.Chat/MongoDB archived in docker-compose.legacy-rocketchat.yml (see decisions/ceo-log.md, ADR-001)
 
-## Commandes de validation
+## Validation commands
 
 ```bash
-# Démarrer l'infrastructure locale
+# Start the local infrastructure
 docker compose -f docker-compose.lite.yml up -d
 
-# Vérifier les conteneurs
+# Check the containers
 docker ps
 
-# Logs d'un agent spécifique
-docker logs <nom-conteneur>
+# Logs of a specific agent
+docker logs <container-name>
 ```
 
-## Règles de sécurité
+## Security rules
 
-- Ne jamais lire ou modifier `.env`, secrets, credentials.
-- Les fichiers `.zip` dans la racine ne sont pas des sources — ne pas les modifier.
-- Ne jamais effectuer de `git add .` ou `git add -A`.
+- Never read or modify `.env`, secrets, credentials.
+- The `.zip` files in the root are not sources — do not modify them.
+- Never run `git add .` or `git add -A`.
 
-## Règles Git
+## Git rules
 
-- Staging explicite uniquement.
-- Commit : `git commit -m "type(scope): description"`
-- Ne jamais `git push` sans instruction humaine explicite.
-- Remote : `github.com/leosand/assurance-toto.git`
+- Explicit staging only.
+- Commit: `git commit -m "type(scope): description"`
+- Never `git push` without explicit human instruction.
+- Remote: `github.com/leoand/assurance-toto.git`
 
-## Procédure avant livraison
+## Procedure before delivery
 
-1. `git status --short` — vérifier que seuls les fichiers attendus sont modifiés
+1. `git status --short` — verify that only the expected files are modified
 2. `git diff --check`
-3. Vérifier les conteneurs Docker actifs
+3. Check the active Docker containers
 
 ## Docker
 
-- Chaque agent a son propre Dockerfile dans `agents/<nom>/`
-- L'infrastructure de démo est définie dans `docker-compose.lite.yml` (profil MVP)
-  et `docker-compose.yml` (profil complet, 8 agents, nats en option)
+- Each agent has its own Dockerfile in `agents/<name>/`
+- The demo infrastructure is defined in `docker-compose.lite.yml` (MVP profile)
+  and `docker-compose.yml` (full profile, 8 agents, nats as an option)
 
-## Décisions
+## Decisions
 
-- Les décisions techniques sont documentées dans `decisions/`
-- Les scénarios de test sont dans `scenarios/`
+- Technical decisions are documented in `decisions/`
+- Test scenarios are in `scenarios/`

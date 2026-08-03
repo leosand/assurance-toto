@@ -13,7 +13,7 @@ function cfg(): ReturnType<typeof loadConfig> {
 }
 
 describe('GET /dashboard (cockpit CEO, ADR-002)', () => {
-  it('retourne 200 HTML avec les libellés clés (FR) et le badge DÉMO', async () => {
+  it('returns 200 HTML with the key labels (EN UI) and the DEMO badge', async () => {
     const { repo } = makeMemoryRepository();
     const app = await buildServer(cfg(), { repo });
     const res = await app.inject({ method: 'GET', url: '/dashboard' });
@@ -22,19 +22,19 @@ describe('GET /dashboard (cockpit CEO, ADR-002)', () => {
     const html = res.body;
     expect(html).toContain('Assurance Toto');
     expect(html).toContain('Cockpit CEO');
-    expect(html).toContain('DÉMO');
+    expect(html).toContain('DEMO');
     expect(html).toContain('P&amp;L');
-    expect(html).toContain('Pipeline commercial');
-    expect(html).toContain('Sinistres');
-    expect(html).toContain('Approbations CEO');
-    expect(html).toContain('anonymisation');
+    expect(html).toContain('Sales pipeline');
+    expect(html).toContain('Claims');
+    expect(html).toContain('Pending CEO approvals');
+    expect(html).toContain('anonymization');
     expect(html).toContain('kill-switch');
-    expect(html).toContain('Timeline audit');
+    expect(html).toContain('Audit timeline');
     expect(html).toContain('http-equiv="refresh"');
     await app.close();
   });
 
-  it('affiche les approbations en attente seedées (avec correlation_id et montant)', async () => {
+  it('displays the seeded pending approvals (with correlation_id and amount)', async () => {
     const { repo } = makeMemoryRepository();
     await repo.createApprobation({
       correlationId: 'a3f1c2d4-0000-4000-8000-0000000000aa',
@@ -57,33 +57,33 @@ describe('GET /dashboard (cockpit CEO, ADR-002)', () => {
     expect(html).toContain('a3f1c2d4-0000-4000-8000-0000000000aa');
     expect(html).toContain('a3f1c2d4-0000-4000-8000-0000000000bb');
     expect(html).toContain('CLM-42');
-    // Compteur « en attente » proéminent
+    // Prominent pending counter
     expect(html).toMatch(/class="count-big bad">2</);
-    // Les formulaires de décision pointent vers l'endpoint existant avec le npub CEO de config
+    // Decision forms point to the existing endpoint with the config CEO npub
     expect(html).toContain('/approvals/a3f1c2d4-0000-4000-8000-0000000000aa/decide');
     expect(html).toContain(CEO_HEX);
     await app.close();
   });
 
-  it('rend l’état kill-switch (banner rouge quand actif)', async () => {
+  it('renders the kill-switch state (red banner when active)', async () => {
     const { repo } = makeMemoryRepository({ killSwitch: { id: 1, actif: true, active_par: CEO_HEX, active_le: new Date().toISOString() } });
     const app = await buildServer(cfg(), { repo });
     const res = await app.inject({ method: 'GET', url: '/dashboard' });
-    expect(res.body).toContain('KILL-SWITCH ACTIF');
+    expect(res.body).toContain('KILL-SWITCH ACTIVE');
     expect(res.body).toContain('ks-on');
     await app.close();
   });
 
-  it('rend l’état kill-switch inactif (état PASS vert)', async () => {
+  it('renders the inactive kill-switch state (green PASS state)', async () => {
     const { repo } = makeMemoryRepository({ killSwitch: { id: 1, actif: false, active_par: null, active_le: null } });
     const app = await buildServer(cfg(), { repo });
     const res = await app.inject({ method: 'GET', url: '/dashboard' });
-    expect(res.body).toContain('kill-switch inactif');
+    expect(res.body).toContain('kill-switch inactive');
     expect(res.body).toContain('ks-ok');
     await app.close();
   });
 
-  it('P&L et audit seedés dans le repo en mémoire sont rendus (résultat, ratio, timeline)', async () => {
+  it('P&L and audit seeded in the in-memory repo are rendered (result, ratio, timeline)', async () => {
     const { repo } = makeMemoryRepository();
     await repo.inTransaction(async (tx) => {
       await tx.query(
@@ -99,17 +99,17 @@ describe('GET /dashboard (cockpit CEO, ADR-002)', () => {
     const app = await buildServer(cfg(), { repo });
     const res = await app.inject({ url: '/dashboard' });
     const html = res.body;
-    // 12 000 − 4 500 = 7 500 € cumulé
+    // 12 000 − 4 500 = 7 500 EUR cumulative
     expect(html).toContain('7');
-    expect(html).toMatch(/37[,.]5\s?%/); // ratio sinistralité auto = 4500/12000
+    expect(html).toMatch(/37[,.]5\s?%/); // auto claims ratio = 4500/12000
     expect(html).toContain('anonymisation.pseudo');
     expect(html).toContain('b1b1b1b1-0000-4000-8000-000000000001');
-    // Le compteur conformité remonte l'événement d'anonymisation
-    expect(html).toMatch(/<strong>1<\/strong> événement/);
+    // The compliance counter reflects the anonymization event
+    expect(html).toMatch(/<strong>1<\/strong> anonymization event/);
     await app.close();
   });
 
-  it('surligne la ligne correspondant à ?correlation_id=', async () => {
+  it('highlights the row matching ?correlation_id=', async () => {
     const { repo } = makeMemoryRepository();
     await repo.createApprobation({
       correlationId: 'c9c9c9c9-0000-4000-8000-0000000000cc',
@@ -124,7 +124,7 @@ describe('GET /dashboard (cockpit CEO, ADR-002)', () => {
     await app.close();
   });
 
-  it('section en erreur → "indisponible", la page ne 500 pas', async () => {
+  it('section in error → "unavailable" label, page does not 500', async () => {
     const { repo } = makeMemoryRepository();
     const broken: Repository = {
       ...repo,
@@ -133,11 +133,11 @@ describe('GET /dashboard (cockpit CEO, ADR-002)', () => {
     const app = await buildServer(cfg(), { repo: broken });
     const res = await app.inject({ url: '/dashboard' });
     expect(res.statusCode).toBe(200);
-    expect(res.body).toContain('indisponible');
+    expect(res.body).toContain('unavailable');
     await app.close();
   });
 
-  it('le formulaire CEO poste sur /decide (html form-urlencoded) → redirect vers /dashboard', async () => {
+  it('the CEO form posts to /decide (html form-urlencoded) → redirect to /dashboard', async () => {
     const { repo } = makeMemoryRepository();
     await repo.createApprobation({
       correlationId: 'd7d7d7d7-0000-4000-8000-0000000000dd',
@@ -161,7 +161,7 @@ describe('GET /dashboard (cockpit CEO, ADR-002)', () => {
     await app.close();
   });
 
-  it('POST /decide avec un npub non-CEO reste refusé (whitelist)', async () => {
+  it('POST /decide with a non-CEO npub stays denied (whitelist)', async () => {
     const { repo } = makeMemoryRepository();
     await repo.createApprobation({
       correlationId: 'e3e3e3e3-0000-4000-8000-0000000000ee',

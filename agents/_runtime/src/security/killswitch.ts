@@ -1,8 +1,8 @@
 /**
- * Kill-switch global : ligne `kill_switch` (id=1) en base.
- * Pollé avant CHAQUE action autonome/outward ; cache borné à 2 s max.
- * Fail-closed : en cas d'erreur de lecture, l'état précédent est conservé,
- * et s'il n'y en a pas encore, l'action est refusée (état inconnu = prudent).
+ * Global kill-switch: `kill_switch` row (id=1) in the database.
+ * Polled before EVERY autonomous/outward action; cache bounded to 2 s max.
+ * Fail-closed: on read error, the previous state is kept,
+ * and if there is none yet, the action is denied (unknown state = cautious).
  */
 import type { Logger } from 'pino';
 import type { DbClient } from '../db/client.js';
@@ -37,15 +37,15 @@ export class KillSwitch {
       this.cache = { value, at: now };
       return value;
     } catch {
-      // Fail-closed : impossible de lire l'état → on conserve le cache ou on refuse.
+      // Fail-closed: cannot read the state → keep the cache or deny.
       return this.cache?.value ?? true;
     }
   }
 
-  /** Vérifie avant une action autonome ; lève KillSwitchActiveError si actif. */
+  /** Checks before an autonomous action; throws KillSwitchActiveError if active. */
   async assertAllows(action: string): Promise<void> {
     if (await this.isActive()) {
-      this.logger.warn({ action }, 'killswitch actif — action autonome refusée');
+      this.logger.warn({ action }, 'killswitch active — autonomous action denied');
       throw new KillSwitchActiveError(action);
     }
   }
@@ -53,7 +53,7 @@ export class KillSwitch {
 
 export class KillSwitchActiveError extends Error {
   constructor(public readonly action: string) {
-    super(`Kill-switch actif : action autonome refusée (${action})`);
+    super(`Kill-switch active: autonomous action denied (${action})`);
     this.name = 'KillSwitchActiveError';
   }
 }

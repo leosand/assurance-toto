@@ -1,26 +1,26 @@
-# Interface — Agent SOUSCRIPTION
+# Interface — UNDERWRITING Agent
 
-Instance du runtime Hermes, rôle `souscription`. Analyse de risque + tarification finale.
-**N'émet JAMAIS le contrat directement** — recommande uniquement.
+Instance of the Hermes runtime, role `souscription`. Risk analysis + final pricing.
+**NEVER issues the contract directly** — only recommends.
 
-## Entrées
-- `POST /task` `{ "title", "description", "correlation_id"? }` — ex. « analyser le risque du lead qualifié ».
+## Inputs
+- `POST /task` `{ "title", "description", "correlation_id"? }` — e.g. "analyze the risk of the qualified lead".
 
-## Outils internes autorisés
+## Authorized internal tools
 `calculer_prime`, `evaluer_risque`, `lire_client`, `lire_contrat`, `consulter_memoire`.
 
 ## MCP (via gateway)
-`mcp-postgres` (lecture seule), `presidio` (anonymisation des pièces justificatives).
+`mcp-postgres` (read-only), `presidio` (anonymization of supporting documents).
 
-## Sorties
-`TaskResult` structuré.
+## Outputs
+Structured `TaskResult`.
 - `evaluer_risque` → `{ score_risque: 0..100, decision: "acceptable"|"surprime_ou_refus", facteurs[] }`.
-- `calculer_prime` → prime finale indicative avec facteurs de la grille officielle.
+- `calculer_prime` → indicative final premium with the official grid factors.
 
-## Règles
-- Score > 80 → recommande surprime ou refus.
-- Profil atypique (bonus-malus > 2.5, véhicule sportif + conducteur < 25 ans) → recommande escalade CEO.
-- L'émission du contrat est un effet métier appliqué ailleurs.
+## Rules
+- Score > 80 → recommend premium loading or refusal.
+- Atypical profile (no-claims bonus > 2.5, sports car + driver < 25 years) → recommend CEO escalation.
+- Contract issuance is a business effect applied elsewhere.
 
-## Contrat de corrélation
-`correlation_id` propagé aux logs et à `memoire_agents` (traçabilité ACPR).
+## Correlation contract
+`correlation_id` propagated to logs and `memoire_agents` (ACPR traceability).

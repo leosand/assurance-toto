@@ -1,128 +1,128 @@
 # Architecture — Assurance Toto (Hermes + Buzz + Postgres/PGVector)
 
-> Version 0.1.0 — 2026-08-02 · Mermaid + flux d'événements + boundaries de sécurité
+> Version 0.1.0 — 2026-08-02 · Mermaid + event flows + security boundaries
 
-## Vue d'ensemble
+## Overview
 
 ```mermaid
 flowchart LR
-  CEO[CEO / Ops humain] -->|commandes structurées + signature Nostr| BuzzWeb[Buzz Web :3002]
-  CEO -->|"décision confirmée (CEO pubkey signé)"| BuzzWeb
+  CEO[CEO / Human Ops] -->|structured commands + Nostr signature| BuzzWeb[Buzz Web :3002]
+  CEO -->|"confirmed decision (signed CEO pubkey)"| BuzzWeb
   BuzzWeb --> BuzzRelay[Buzz Relay :8080<br/>NIP-29 channels, audit chain]
 
   BuzzRelay -->|"POST /events · REST/NIP-98"| Bridge[BUZZ-HERMES-BRIDGE :3100]
   Bridge -->|"claim.settlement.approve<br/>approbations.create<br/>killswitch agent.killswitch.*"| BRouter
 
-  subgraph BridgeInternals[Politique coverage]
-    BJS[JSON Schema strict<br/>additionalProperties:false]
-    BPol[Policy.evaluate<br/>RBAC/ABAC, 7 règles]
-    BId[Idempotence<br/>commandes_consommees UNIQUE]
+  subgraph BridgeInternals[Policy coverage]
+    BJS[Strict JSON Schema<br/>additionalProperties:false]
+    BPol[Policy.evaluate<br/>RBAC/ABAC, 7 rules]
+    BId[Idempotency<br/>commandes_consommees UNIQUE]
     BAu[Audit chain<br/>SHA-256 prev_hash]
-    BSec[BRIDGE_REQUIRE_SIGNED_COMMANDS<br/>mode PROD = true]
-    BKill[Kill switch<br/>global bloque autonomie]
+    BSec[BRIDGE_REQUIRE_SIGNED_COMMANDS<br/>PROD mode = true]
+    BKill[Kill switch<br/>globally blocks autonomy]
   end
   Bridge --> BRouter{Router}
-  BRouter -->|règle métier respecte chaîne| BJS
+  BRouter -->|business rule respects chain| BJS
   BRouter -->|allow/deny| BPol
-  BRouter -->|déjà consumée ?| BId
-  BPol -->|si autorisé| BEffects
+  BRouter -->|already consumed ?| BId
+  BPol -->|if authorized| BEffects
 
-  subgraph BEffects[Effets métier (transactionnel)]
+  subgraph BEffects[Business effects (transactional)]
     PG[(Postgres 16 + PGVector<br/>sinistres, contrats, clients, pnl_ledger, audit_log)]
-    PgVector["PGVector<br/>oisillons 768 dims<br/>memoire_agents"]
+    PgVector["PGVector<br/>istillons 768 dims<br/>memoire_agents"]
   end
   BEffects --> BEffectsChain[UPDATE sinistres<br/>INSERT pnl_ledger (APPEND-ONLY)<br/>INSERT audit_log<br/>UPDATE approbations]
   BEffectsChain --> PG
   Bridge --> PG
 
-  subgraph Agents[Flotte Hermes agents (runtime TS maison)]
-    Orc[Orchestrateur]
+  subgraph Agents[Hermes agent fleet (homegrown TS runtime)]
+    Orc[Orchestrator]
     Sales[Sales/Acquisition]
-    Souscription[Souscription/Risque]
-    Sinistres[Sinistres & Contentieux]
-    HR[Finance<br/>Support<br/>Marketing<br/>Conformité/Sécu]
+    Souscription[Underwriting/Risk]
+    Sinistres[Claims & Litigation]
+    HR[Finance<br/>Support<br/>Marketing<br/>Compliance/Security]
   end
-  BRouter -->|"lance skill métier"| Agents
-  Agents -->|"POST /commands<br/>(commandes autorisées, npub authentifié)"| Bridge
-  Agents -->|"embedding nomic-embed<br/>(9.4  → memoire_agents)"| PgVector
-  Agents -->|"tool calling<br/>Ollama qwen4:e4b/16k<br/>Germa vision=mandatory anon"| OllamaWindows[(Ollama<br/>hôte Windows<br/>localhost:11434)]
+  BRouter -->|"launches business skill"| Agents
+  Agents -->|"POST /commands<br/>(authorized commands, authenticated npub)"| Bridge
+  Agents -->|"nomic-embed embedding<br/>(9.4 → memoire_agents)"| PgVector
+  Agents -->|"tool calling<br/>Ollama qwen4:e4b/16k<br/>Germa vision=mandatory anon"| OllamaWindows[(Ollama<br/>Windows host<br/>localhost:11434)]
   PgVector -.-> Postgres
 ```
 
-## Confiance (Trust boundaries)
+## Trust boundaries
 
-| Zone | Contenu | Modèle menacé | Mitigation |
+| Zone | Content | Threat model | Mitigation |
 |---|---|---|---|
-| Buzz↔Bridge | Events Nostr signés, API REST NIP-98/WS NIP-42 | Agent interne corrompu | Validateur Nostr (kind 27235), deny-by-default |
-| Bridge↔Agents | Commandes structurées typées | Exécution non autorisée | BRIDGE_POLICY + idempotence + kill-switch |
-| Bridge↔Postgres | Effets transactionnels métier | Injection SQL, corruption état | Préparé statements + ON CONFLICT, append-only triggers, hash chain |
-| Agents↔LLM | Prompts/retours Ollama | Hallucinations, PII | Presidio anonymisation, sortie JSON strict, garde-fou skill |
-| Agents↔MCP tools | SearXNG, MailHog, Gitea | Escalade de privilèges | allowlist MCP (dept-specific), least privilege |
+| Buzz→Bridge | Signed Nostr events, REST API NIP-98/WS NIP-42 | Corrupted internal agent | Nostr validator (kind 27235), deny-by-default |
+| Bridge→Agents | Typed structured commands | Unauthorized execution | BRIDGE_POLICY + idempotency + kill-switch |
+| Bridge→Postgres | Transactional business effects | SQL injection, state corruption | Prepared statements + ON CONFLICT, append-only triggers, hash chain |
+| Agents→LLM | Ollama prompts/returns | Hallucinations, PII | Presidio anonymization, strict JSON output, skill guardrails |
+| Agents→MCP tools | SearXNG, MailHog, Gitea | Privilege escalation | MCP allowlist (dept-specific), least privilege |
 
-## Séquence d'autorisation (§6B)
+## Authorization sequence (§6B)
 
 ```
-1. Sinistre déclaré    → Postgres (`sinistres.statut='ouvert'`)
-2. Agent sinistres    → recommandation (claim.settlement.approve)
-                       → denied si montant > seuil
-                       → crée `approbations('en_attente')` (POST /approvals)
-3. Dashboard/Buzz      → notification dans #approbations-ceo
-4. CEO décide         → POST /approvals/:correlation_id/decide
-                        + event Nostr signé (signature verifiée)
-                        + decided_by = pubkey CEO whitelisté
-                        + reason explicite
-5. Bridge             → décision validée (403 unless CEO wlist)
-                        → audited, chaînage `claim.settlement.approve`
-                        → nouveau correlation_id
-                        → policy.evaluate re-check (montant vs plafond)
-                        → idempotence (commandes_consommees)
-                        → transaction settlement P&L `approbations.approuve`
-                        → mise à jour `sinistres.statut='regle'`
-                        → publication Buzz (kind 9 avec correlation_id)
-6. Audit complet       → hash chain (prev_hash → hash) prouvant immutabilité
+1. Claim declared      → Postgres (`sinistres.statut='ouvert'`)
+2. Claims agent        → recommendation (claim.settlement.approve)
+                            → denied if amount > threshold
+                            → creates `approbations('en_attente')` (POST /approvals)
+3. Dashboard/Buzz      → notification in #approbations-ceo
+4. CEO decides         → POST /approvals/:correlation_id/decide
+                            + signed Nostr event (verified signature)
+                            + decided_by = whitelisted CEO pubkey
+                            + explicit reason
+5. Bridge              → decision validated (403 unless CEO wlist)
+                            → audited, chained `claim.settlement.approve`
+                            → new correlation_id
+                            → policy.evaluate re-check (amount vs ceiling)
+                            → idempotency (commandes_consommees)
+                            → P&L settlement transaction `approbations.approve`
+                            → update `sinistres.statut='regle'`
+                            → Buzz publication (kind 9 with correlation_id)
+6. Full audit          → hash chain (prev_hash → hash) proving immutability
 ```
 
-Ordre strict :
-1. Auto-approbation : uniquement **si montant ≤ 5000 €** (`BRIDGEESCALATION_THRESHOLD_EUR`), `BRIDGE_ALLOWED_UNSIGNED_ROLES` (npub dépôt Hermes validé), `sinistre` existe et statut=ouvert/en_traitement, déjà pas de compliance block, idempotent.
-2. CEO approuve : **toi + sigged event** (`ceo[n].pubkey`), décisif motif, idempotent via `commandes_consommees`, politique min(plafond demandé, seuil, montant sinistre).
-3. Audit trail : immédiatement avant effet `audit_log.prev_hash → sha256(prev_hash+payload)`.
+Strict order:
+1. Auto-approval: only **if amount ≤ 5000 €** (`BRIDGEESCALATION_THRESHOLD_EUR`), `BRIDGE_ALLOWED_UNSIGNED_ROLES` (Hermes deposit npub validated), `sinistre` exists and statut=ouvert/en_traitement, no compliance block, idempotent.
+2. CEO approve: **manual + signed event** (`ceo[n].pubkey`), decisive reason, idempotent via `commandes_consommees`, policy min(requested ceiling, threshold, claim amount).
+3. Audit trail: immediately before effect `audit_log.prev_hash → sha256(prev_hash+payload)`.
 
-## Politique anti-foncée (7 règles)
+## Anti-abuse policy (7 rules)
 
-Sous le compte portal `POST /commands` :
+Under the portal endpoint `POST /commands`:
 
-1. **Schema invalid** : contre les structures non conformes (AJV with `additionalProperties:false`).
-2. **Buxtobre libre** : texte = schéma parse échoue → refus frontal (pas examiné comme command).
-3. **Signature invalide** (`kind 27235`) → return Forbidden.
-4. **Role inconnu** : npub absent des listes autorisées.
-5. **CEO-sans-signature** : `BRIDGE_REQUIRE_SIGNED_COMMANDS=true` et action réservée CEO non signée → deny.
-6. **Compliance locked** : `sinistre.compliance_bloque = true` → deny.
-7. **Idempotence violée** : `command_id` (hash content/command) déjà dans `commandes_consommees`.
-8. **Threshold exceed + role agent** : `montant > seuil` et rôle ≠ ceo → deny.
-9. **Statut invalide** : sinistre pas dans état ouvert/en_traitement (ou refuse/cloture si reject).
-10. **Montant mismatch** : `montant_eur > plafond_effectif` (민ceo peut demander plus que le goal-check `max_amount_eur`).
+1. **Invalid schema**: against non-conforming structures (AJV with `additionalProperties:false`).
+2. **Free textbox**: text = schema parse fails → frontal refusal (not examined as a command).
+3. **Invalid signature**: (`kind 27235`) → return Forbidden.
+4. **Unknown role**: npub absent from authorized lists.
+5. **CEO-without-signature**: `BRIDGE_REQUIRE_SIGNED_COMMANDS=true` and CEO-reserved action unsigned → deny.
+6. **Compliance locked**: `sinistre.compliance_bloque = true` → deny.
+7. **Idempotency violated**: `command_id` (content/command hash) already in `commandes_consommees`.
+8. **Threshold exceed + agent role**: `montant > seuil` and role ≠ ceo → deny.
+9. **Invalid status**: claim not in ouvert/en_traitement state (or refuse/cloture if reject).
+10. **Amount mismatch**: `montant_eur > plafond_effectif` (the CEO can request more than the `max_amount_eur` goal-check).
 
-## Sécurité des clés
+## Key security
 
-- générées par `buzz-admin generate-key` (Schnorr Nostr)
-- stockées dans `.env.buzz` fichiers (chmod 600) dans Git Bash
-- buz-admin add-member les ajoute au relay workspace
-- ne pas publier `buz_admin` ni `BUZZ_PRIVATE_KEY` publiquement
+- generated by `buzz-admin generate-key` (Schnorr Nostr)
+- stored in `.env.buzz` files (chmod 600) in Git Bash
+- buzz-admin add-member adds them to the relay workspace
+- do not publish `buz_admin` or `BUZZ_PRIVATE_KEY` publicly
 
-## Observabilité
+## Observability
 
-- **logs pino** JSON structurés : level,time,pid,hostname,correlation_id,step,actor,msg
-- **Prometheus** : `/metrics` (gauges, histogram, default registry)
-- **health** : `/healthz` (process healthy) / `/readyz` (pg + buzz connectivity)
-- **audit** : `/audit/verify` (chaine hash vérifiable) — tamper détection immédiate
+- **pino logs** structured JSON: level,time,pid,hostname,correlation_id,step,actor,msg
+- **Prometheus**: `/metrics` (gauges, histogram, default registry)
+- **health**: `/healthz` (process healthy) / `/readyz` (pg + buzz connectivity)
+- **audit**: `/audit/verify` (verifiable hash chain) — immediate tamper detection
 
-## Limites réelles (démo, pas production)
+## Real limits (demo, not production)
 
-- Buzz : c'est une image `ghcr.io/block/buzz:main` immutable (pas de fork en cours)
-- Buzz n'a pas d'approbation native (🚧 WF-08) : on les gère **au niveau bridge** (choix config compatible jusqu'à ce que WF-08 soit stable)
-- Ollama : 7B/8B = modèles satisfaisance absolue + gardez en-garde (Skills designed to keep outputs structurées JSON)
-- `BRIDGE_REQUIRE_SIGNED_COMMANDS=false` en démo (compréhensibilité du cycle) — PROD = true
+- Buzz: it is an immutable `ghcr.io/block/buzz:main` image (no fork in progress)
+- Buzz has no native approval (see WF-08): they are managed **at the bridge level** (config choice compatible until WF-08 is stable)
+- Ollama: 7B/8B = satisfactory-enough models + guardrails (skills designed to keep outputs structured JSON)
+- `BRIDGE_REQUIRE_SIGNED_COMMANDS=false` in demo (cycle comprehensibility) — PROD = true
 
 ---
 
-**Ce diagramme avec `docs/NETWORKING.md`** rendent la vision technique des boundaries + flux opérationnels.
+**This diagram with `docs/NETWORKING.md`** provides the technical vision of the boundaries + operational flows.

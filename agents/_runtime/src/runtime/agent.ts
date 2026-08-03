@@ -1,15 +1,15 @@
 /**
- * Boucle agent Hermes : un runTask = conversation bornée (max 6 itérations).
+ * Hermes agent loop: one runTask = a bounded conversation (max 6 iterations).
  *
- * Séquence : prompt système (rôle + skills + règles "toujours un tool call,
- * JSON structuré, aucune PII") → tâche anonymisée → ollama.chat (tools filtrés
- * par l'allowlist) → exécution des tool calls (deny-by-default) → si un outil
- * produit une candidateCommand : validation minimale + POST bridge /commands
- * (author AGENT_NPUB, correlation_id frais ou fourni) → écriture mémoire_agents
- * (apprentissage). Le LLM recommande, le bridge dispose.
+ * Sequence: system prompt (role + skills + rules "always a tool call,
+ * structured JSON, no PII") → anonymized task → ollama.chat (tools filtered
+ * by the allowlist) → tool call execution (deny-by-default) → if a tool
+ * produces a candidateCommand: minimal validation + POST bridge /commands
+ * (author AGENT_NPUB, fresh or provided correlation_id) → memoire_agents write
+ * (learning). The LLM recommends, the bridge decides.
  *
- * Garde-fous par action : kill-switch, allowlist, anonymisation PII en entrée
- * et dernier masquage sur tout texte sortant vers le LLM.
+ * Per-action guardrails: kill-switch, allowlist, PII anonymization on input
+ * and a final scrub on any text going out to the LLM.
  */
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
@@ -43,9 +43,9 @@ export interface TaskResult {
   correlation_id: string;
   agent: string;
   toolCalls: ToolCallRecord[];
-  /** Résultat du POST /commands (decision) ou /approvals (escalade) au bridge. */
+  /** Result of the POST /commands (decision) or /approvals (escalation) to the bridge. */
   command?: { posted: BridgePostResult };
-  /** Fallback structuré quand le LLM répond sans tool call. */
+  /** Structured fallback when the LLM answers without a tool call. */
   fallbackText?: string;
   summary: string;
   stoppedByKillSwitch: boolean;
@@ -69,24 +69,24 @@ export interface HermesAgent {
   runTask(task: TaskInput): Promise<TaskResult>;
 }
 
-// ---------- prompt système ----------
+// ---------- system prompt ----------
 
 function buildSystemPrompt(cfg: HermesConfig, skills: Skill[], toolNames: string[]): string {
   const lines: string[] = [
-    `Tu es l'agent "${cfg.role}" d'Assurance Toto (département "${cfg.departement}").`,
+    `You are the "${cfg.role}" agent of Assurance Toto (department "${cfg.departement}").`,
     ``,
-    `RÈGLES STRICTES :`,
-    `1. Réponds TOUJOURS par un appel d'outil (tool call). Jamais de texte libre sauf si aucun outil n'est pertinent.`,
-    `2. Sortie structurée JSON uniquement via les outils. Pas de prose.`,
-    `3. AUCUNE donnée personnelle (PII) dans tes raisonnements, arguments ou réponses.`,
-    `4. Tu NE MODIFIES JAMAIS directement les données métier. Tu peux seulement recommander via l'outil recommander_reglement ; le règlement réel est appliqué par le bridge après politique/approbation.`,
-    `5. Les outils disponibles sont : ${toolNames.join(', ')}.`,
+    `STRICT RULES:`,
+    `1. ALWAYS answer with a tool call. Never free text unless no tool is relevant.`,
+    `2. Structured JSON output only, via tools. No prose.`,
+    `3. NO personal data (PII) in your reasoning, arguments or answers.`,
+    `4. You NEVER directly modify business data. You can only recommend via the recommander_reglement tool; the actual settlement is applied by the bridge after policy/approval.`,
+    `5. Available tools are: ${toolNames.join(', ')}.`,
     ``,
   ];
   for (const skill of skills) {
     lines.push(`SKILL "${skill.name}" :`);
     if (skill.description.length > 0) lines.push(`Description : ${skill.description}`);
-    if (skill.toolsAllowed.length > 0) lines.push(`Outils privilégiés : ${skill.toolsAllowed.join(', ')}`);
+    if (skill.toolsAllowed.length > 0) lines.push(`Preferred tools: ${skill.toolsAllowed.join(', ')}`);
     lines.push(skill.systemTemplate.trim(), ``);
   }
   return lines.join('\n');
@@ -99,15 +99,15 @@ function summarize(
 ): string {
   if (toolRecords.length === 0) {
     return fallback.length > 0
-      ? `Aucun outil appelé — réponse texte du LLM retournée en fallback.`
-      : `Aucun outil appelé et aucune réponse.`;
+      ? `No tool called — LLM text answer returned as fallback.`
+      : `No tool called and no answer.`;
   }
   const names = toolRecords.map((r) => `${r.name}:${r.ok ? 'ok' : 'err'}`).join(', ');
   const cmd =
     command === undefined
-      ? 'aucune commande émise'
-      : `commande bridge ${command.ok ? 'acceptée' : 'refusée'} (HTTP ${command.httpStatus})`;
-  return `Outils exécutés [${names}] ; ${cmd}.`;
+      ? 'no command issued'
+      : `bridge command ${command.ok ? 'accepted' : 'denied'} (HTTP ${command.httpStatus})`;
+  return `Tools executed [${names}]; ${cmd}.`;
 }
 
 // ---------- agent ----------
@@ -120,19 +120,19 @@ export function createAgent(deps: AgentDeps): HermesAgent {
     const correlationId = task.correlation_id ?? randomId();
     const scoped = log.child({ correlation_id: correlationId, action: 'runTask' });
 
-    // Kill-switch : refus net avant toute action autonome.
+    // Kill-switch: hard denial before any autonomous action.
     if (await deps.killSwitch.isActive()) {
-      scoped.warn({ title: task.title }, 'killswitch actif — tâche refusée');
+      scoped.warn({ title: task.title }, 'killswitch active — task denied');
       return {
         correlation_id: correlationId,
         agent: deps.cfg.role,
         toolCalls: [],
-        summary: 'Arrêté : kill-switch actif.',
+        summary: 'Stopped: kill-switch active.',
         stoppedByKillSwitch: true,
       };
     }
 
-    // Anonymisation de la tâche avant tout envoi au LLM.
+    // Task anonymization before any send to the LLM.
     const safeTitle = await deps.anonymizer.anonymize(task.title);
     const safeDescription = await deps.anonymizer.anonymize(task.description);
 
@@ -144,7 +144,7 @@ export function createAgent(deps: AgentDeps): HermesAgent {
       { role: 'system', content: systemPrompt },
       {
         role: 'user',
-        content: `Tâche : ${safeTitle}\n\n${safeDescription}`,
+        content: `Task: ${safeTitle}\n\n${safeDescription}`,
       },
     ];
 
@@ -154,14 +154,14 @@ export function createAgent(deps: AgentDeps): HermesAgent {
     let fallbackText = '';
 
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration += 1) {
-      // Re-vérification du kill-switch avant CHAQUE itération autonome.
+      // Kill-switch re-check before EVERY autonomous iteration.
       if (await deps.killSwitch.isActive()) {
-        scoped.warn({ iteration }, 'killswitch activé en cours de tâche — arrêt propre');
+        scoped.warn({ iteration }, 'killswitch activated mid-task — clean stop');
         return {
           correlation_id: correlationId,
           agent: deps.cfg.role,
           toolCalls: records,
-          summary: 'Arrêté en cours de route : kill-switch activé.',
+          summary: 'Stopped mid-way: kill-switch activated.',
           stoppedByKillSwitch: true,
         };
       }
@@ -171,18 +171,18 @@ export function createAgent(deps: AgentDeps): HermesAgent {
         response = await deps.ollama.chat(messages, toolSchemas);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        scoped.error({ iteration, err: msg }, 'échec ollama chat');
+        scoped.error({ iteration, err: msg }, 'ollama chat failure');
         break;
       }
 
-      // Fallback structuré : le LLM n'a émis aucun tool call.
+      // Structured fallback: the LLM emitted no tool call.
       if (response.toolCalls.length === 0) {
         fallbackText = response.text;
-        scoped.info({ iteration }, 'llm: pas de tool call — fallback structuré');
+        scoped.info({ iteration }, 'llm: no tool call — structured fallback');
         break;
       }
 
-      // Ajoute le message assistant (sans PII) à la conversation.
+      // Adds the assistant message (PII-free) to the conversation.
       messages.push({
         role: 'assistant',
         content: response.text,
@@ -209,40 +209,40 @@ export function createAgent(deps: AgentDeps): HermesAgent {
         });
       }
 
-      // Une commande candidate ou une escalade pendante a été produite : inutile de boucler.
+      // A candidate command or pending escalation was produced: no point looping.
       if (candidateCommand !== null || pendingApproval !== null) break;
       if (!madeProgress) break;
     }
 
-    // ---------- POST au bridge : commande autonome OU escalade CEO ----------
+    // ---------- POST to bridge: autonomous command OR CEO escalation ----------
     let commandResult: BridgePostResult | undefined;
     if (pendingApproval !== null) {
-      // Règlement > seuil : JAMAIS d'auto-approve — on crée l'approbation
-      // 'en_attente' côté bridge (la décision reste humaine CEO).
+      // Settlement > threshold: NEVER auto-approve — a 'en_attente' approval
+      // is created on the bridge side (the decision stays human, CEO).
       if (await deps.killSwitch.isActive()) {
-        scoped.warn('killswitch actif — escalade NON postée au bridge');
+        scoped.warn('killswitch active — escalation NOT posted to bridge');
       } else {
         commandResult = await deps.bridge.createApprobation(pendingApproval);
         scoped.info(
           { ok: commandResult.ok, httpStatus: commandResult.httpStatus, claim_id: pendingApproval.claim_id },
-          'escalade CEO postée au bridge (approbation en_attente)',
+          'CEO escalation posted to bridge (en_attente approval)',
         );
       }
     } else if (candidateCommand !== null) {
-      // kill-switch encore une fois juste avant l'action outward.
+      // kill-switch once more just before the outward action.
       if (await deps.killSwitch.isActive()) {
-        scoped.warn('killswitch actif — commande NON envoyée au bridge');
+        scoped.warn('killswitch active — command NOT sent to bridge');
       } else {
         const scrubbed = scrubCandidate(candidateCommand);
         commandResult = await deps.bridge.postCommand(scrubbed, correlationId);
         scoped.info(
           { ok: commandResult.ok, httpStatus: commandResult.httpStatus, command: scrubbed.type },
-          'candidate command postée au bridge',
+          'candidate command posted to bridge',
         );
       }
     }
 
-    // ---------- apprentissage : memoire_agents (seule écriture directe) ----------
+    // ---------- learning: memoire_agents (only direct write) ----------
     await storeLearning(deps, correlationId, task.title, records, commandResult);
 
     const stopped = false;
@@ -268,17 +268,17 @@ async function executeOne(
   deps: AgentDeps,
   scoped: Logger,
 ): Promise<ToolExecution> {
-  // Deny-by-default : jamais exécuté si non listé (ou inconnu du registre).
+  // Deny-by-default: never executed if not listed (or unknown to the registry).
   if (!deps.tools.has(call.name)) {
-    scoped.warn({ tool: call.name }, 'outil inconnu du registre — refusé');
-    return { tool: call.name, ok: false, result: { error: 'outil inconnu' } };
+    scoped.warn({ tool: call.name }, 'tool unknown to registry — denied');
+    return { tool: call.name, ok: false, result: { error: 'unknown tool' } };
   }
   if (!isAllowed(deps.allowlist, call.name)) {
-    scoped.warn({ tool: call.name }, 'outil refusé par allowlist');
-    return { tool: call.name, ok: false, result: { error: `outil non autorisé: ${call.name}` } };
+    scoped.warn({ tool: call.name }, 'tool denied by allowlist');
+    return { tool: call.name, ok: false, result: { error: `tool not allowed: ${call.name}` } };
   }
 
-  // Les arguments LLM ne doivent pas véhiculer de PII vers les sorties.
+  // LLM arguments must not carry PII toward outputs.
   const argsJson = JSON.stringify(call.arguments);
   const args = assertNoPii(argsJson)
     ? (JSON.parse(finalScrub(argsJson)) as Record<string, unknown>)
@@ -287,7 +287,7 @@ async function executeOne(
   return deps.tools.execute(call.name, args);
 }
 
-/** Dernier scrub sur les champs textuels de la commande candidate avant envoi. */
+/** Final scrub on the textual fields of the candidate command before sending. */
 function scrubCandidate(
   command: import('../bridge/client.js').BridgeCommand,
 ): import('../bridge/client.js').BridgeCommand {
@@ -305,12 +305,12 @@ async function storeLearning(
   records: ToolCallRecord[],
   command: BridgePostResult | undefined,
 ): Promise<void> {
-  // Jamais le contenu brut : on apprend le PATTERN (noms d'outils + statut),
-  // pas les données métier.
+  // Never the raw content: we learn the PATTERN (tool names + status),
+  // not the business data.
   const contenu =
-    `Tâche «${finalScrub(title).slice(0, 120)}» — ` +
-    `outils: ${records.map((r) => `${r.name}:${r.ok ? 'ok' : 'err'}`).join(', ') || 'aucun'} ; ` +
-    (command !== undefined ? `bridge: HTTP ${command.httpStatus}` : `pas de commande.`);
+    `Task "${finalScrub(title).slice(0, 120)}" — ` +
+    `tools: ${records.map((r) => `${r.name}:${r.ok ? 'ok' : 'err'}`).join(', ') || 'none'}; ` +
+    (command !== undefined ? `bridge: HTTP ${command.httpStatus}` : `no command.`);
   const embedding = await deps.ollama.embed(contenu);
   await deps.db.insertMemoire({
     departement: deps.cfg.departement,

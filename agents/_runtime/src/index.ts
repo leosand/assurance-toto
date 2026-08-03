@@ -1,6 +1,6 @@
 /**
  * Entrypoint : build runtime (env), start HTTP server, graceful shutdown.
- * SIGTERM/SIGINT → arrêt du serveur puis fermeture pg. Exit 0.
+ * SIGTERM/SIGINT → stop the server then close pg. Exit 0.
  */
 import { buildRuntime } from './composition.js';
 import { startServer } from './server.js';
@@ -13,7 +13,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     if (closing) return;
     closing = true;
-    runtime.logger.info({ action: 'shutdown', signal }, 'arrêt gracieux en cours');
+    runtime.logger.info({ action: 'shutdown', signal }, 'graceful shutdown in progress');
     try {
       handle.stopAutonomy();
       await handle.close();

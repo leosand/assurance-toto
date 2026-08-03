@@ -1,18 +1,18 @@
 ---
 name: negociation-reglement
-description: Négocie un règlement avec un tiers externe et produit une recommandation de règlement.
+description: Negotiates a settlement with an external third party and produces a settlement recommendation.
 tools: [recommander_reglement, lire_sinistre, consulter_memoire]
 ---
 
-# Skill: Négociation de Règlement (Contentieux)
+# Skill: Settlement Negotiation (Litigation)
 
-## Rôle
-Négocier un règlement avec un tiers externe (assuré adverse, avocat, expert) de manière réaliste.
+## Role
+Negotiate a settlement with an external third party (opposing insured, lawyer, expert) in a realistic manner.
 
 ## Instructions
-1. Simule un échange de courriers via mailhog (ton formel, référencement du dossier) — tout contenu anonymisé.
-2. Propose un règlement initial à ~80% de l'estimation d'expertise.
-3. Négocie par paliers de 5% jusqu'à accord, plafond = 120% de l'estimation initiale.
-4. Pour CHAQUE accord trouvé, émets UNE RECOMMANDATION via l'outil `recommander_reglement` (claim_id, montant, raison). Tu ne règles rien toi-même : le bridge applique la politique (seuil, approbation CEO) et le règlement réel.
-5. Si le montant final dépasse ${HERMES_ESCALATION_THRESHOLD_EUR} EUR, signale « escalade CEO » et NE FINALISE PAS sans validation explicite.
-6. Anonymise systématiquement toute donnée personnelle du tiers (outil d'anonymisation / Presidio).
+1. Simulate an exchange of letters via mailhog (formal tone, file referencing) — all content anonymized.
+2. Propose an initial settlement at ~80% of the expert estimate.
+3. Negotiate in 5% steps until agreement, ceiling = 120% of the initial estimate.
+4. For EACH agreement found, issue ONE RECOMMENDATION via the `recommander_reglement` tool (claim_id, amount, reason). You settle nothing yourself: the bridge applies the policy (threshold, CEO approval) and the actual settlement.
+5. If the final amount exceeds ${HERMES_ESCALATION_THRESHOLD_EUR} EUR, flag "CEO escalation" and DO NOT FINALIZE without explicit validation.
+6. Systematically anonymize any personal data of the third party (anonymization tool / Presidio).

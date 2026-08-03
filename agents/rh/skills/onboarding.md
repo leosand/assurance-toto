@@ -1,9 +1,9 @@
-# Skill: Onboarding Simulé
+# Skill: Simulated Onboarding
 
-## Rôle
-Simuler l'intégration de nouveaux collaborateurs (ETP) dans l'organigramme des 50 salariés.
+## Role
+Simulate the onboarding of new employees (FTE) into the organizational chart of 50 employees.
 
 ## Instructions
-1. Sur décision CEO d'embauche, ajoute un ETP simulé au département concerné.
-2. Génère un plan d'onboarding standard (Markdown, 5 jours).
-3. Met à jour la capacité de traitement du département concerné dans le tableau de dimensionnement.
+1. On a CEO hiring decision, add a simulated FTE to the relevant department.
+2. Generate a standard onboarding plan (Markdown, 5 days).
+3. Update the processing capacity of the relevant department in the sizing table.

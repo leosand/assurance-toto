@@ -1,6 +1,6 @@
 # Operations — Assurance Toto
 
-## Prévol
+## Pre-flight
 
 ```bash
 git status --short
@@ -10,48 +10,48 @@ docker ps
 
 ## Tests
 
-Aucun test automatisé défini actuellement.
-Vérification manuelle via les scénarios dans `scenarios/`.
+No automated tests currently defined.
+Manual verification via the scenarios in `scenarios/`.
 
-## Infrastructure Docker
+## Docker infrastructure
 
 ```bash
-# Démarrer l'infrastructure locale
+# Start the local infrastructure
 docker compose -f docker-compose.lite.yml up -d
 
-# Arrêter
+# Stop
 docker compose -f docker-compose.lite.yml down
 
-# Logs d'un agent
+# Logs of an agent
 docker logs toto-agent-sales -f
 ```
 
 ## Git
 
 ```bash
-git add <fichiers>          # staging explicite, jamais git add .
+git add <files>   # explicit staging, never git add .
 git commit -m "type(scope): description"
-git push                    # uniquement après instruction humaine
+git push only after explicit human instruction
 ```
 
-## Conditions de déploiement
+## Deployment conditions
 
-- Infrastructure Docker fonctionnelle (tous les conteneurs verts).
-- Instruction humaine explicite reçue.
-- Aucun `.zip` ne doit être commité (fichiers archivés exclus du staging).
+- Docker infrastructure healthy (all containers green).
+- Explicit human instruction received.
+- No `.zip` may be committed (archived files excluded from staging).
 
-## Rollback conceptuel
+## Conceptual rollback
 
-- Git revert : `git revert HEAD`
-- Docker : `docker compose -f docker-compose.lite.yml down && docker compose -f docker-compose.lite.yml up -d`
+- Git revert: `git revert HEAD`
+- Docker: `docker compose -f docker-compose.lite.yml down && docker compose -f docker-compose.lite.yml up -d`
 
-## Propriétaires/accès
+## Owners/access
 
-- Dépôt GitHub : `github.com/leosand/assurance-toto.git`
-- Services externes : Rocket.Chat, MongoDB, Redis — configurés dans docker-compose.
-- Variables d'environnement dans `.env` (non versionné).
+- GitHub repository: `github.com/leosand/assurance-toto.git`
+- External services: Rocket.Chat, MongoDB, Redis — configured in docker-compose.
+- Environment variables in `.env` (not versioned).
 
-## Sécurité
+## Security
 
-- Ne jamais mettre de secret, token, mot de passe ou URL de base dans ce document.
-- Les fichiers `.zip` archivés ne doivent pas être commités (ajouter au `.gitignore` si nécessaire).
+- Never put any secret, token, password, or base URL in this document.
+- Archived `.zip` files must not be committed (add to `.gitignore` if needed).

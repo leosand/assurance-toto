@@ -1,14 +1,14 @@
 /**
- * Client Ollama local — zéro API payante.
+ * Local Ollama client — zero paid API.
  *
  * `chat` : POST /api/chat { model, messages, tools?, stream:false }.
- * Le modèle (gemma4:e4b) émet `message.tool_calls[{function:{name, arguments}}]`
- * où `arguments` est un OBJET JSON. Un appel sans tool_calls est un fallback
- * structuré (texte libre), jamais un crash.
+ * The model (gemma4:e4b) emits `message.tool_calls[{function:{name, arguments}}]`
+ * where `arguments` is a JSON OBJECT. A call without tool_calls is a structured
+ * fallback (free text), never a crash.
  *
  * `embed` : POST /api/embeddings { model, prompt } → number[768].
  *
- * Timeout + 1 retry. Les erreurs ne contiennent JAMAIS de contenu utilisateur (PII).
+ * Timeout + 1 retry. Errors NEVER contain user content (PII).
  */
 import type { Logger } from 'pino';
 
@@ -26,7 +26,7 @@ export interface ToolCall {
 
 export interface ChatResponse {
   toolCalls: ToolCall[];
-  /** Fallback structuré : le modèle n'a pas appelé d'outil et a répondu en texte. */
+  /** Structured fallback: the model did not call a tool and replied with text. */
   text: string;
 }
 
@@ -97,14 +97,14 @@ async function withRetry<T>(
   try {
     return await fn();
   } catch (err) {
-    logger.warn({ action: `${label}.retry` }, 'appel ollama échoué — 1 retry');
+    logger.warn({ action: `${label}.retry` }, 'ollama call failed — 1 retry');
     try {
       await sleep(500);
       return await fn();
     } catch (err2) {
       const msg = err2 instanceof Error ? err2.message : String(err2);
-      // Jamais de contenu utilisateur dans le message d'erreur.
-      throw new OllamaError(`ollama ${label} en échec après retry : ${msg}`, err2);
+      // Never any user content in the error message.
+      throw new OllamaError(`ollama ${label} failed after retry: ${msg}`, err2);
     }
   }
 }
@@ -136,7 +136,7 @@ export function createOllamaClient(opts: OllamaClientOptions): OllamaClient {
         const fn = call.function;
         const name = fn?.name;
         if (typeof name !== 'string' || name.length === 0) return;
-        // `arguments` DOIT être un objet JSON (fallback gracieux sinon).
+        // `arguments` MUST be a JSON object (graceful fallback otherwise).
         let args: Record<string, unknown> = {};
         if (
           typeof fn?.arguments === 'object' &&
@@ -151,7 +151,7 @@ export function createOllamaClient(opts: OllamaClientOptions): OllamaClient {
               args = parsed as Record<string, unknown>;
             }
           } catch {
-            // arguments illisibles → objet vide, l'outil validera/schèmera.
+            // unreadable arguments → empty object, the tool will validate/schema.
           }
         }
         toolCalls.push({ id: `call-${idx}`, name, arguments: args });
@@ -164,8 +164,8 @@ export function createOllamaClient(opts: OllamaClientOptions): OllamaClient {
     },
 
     /**
-     * Embeddings (768 dims attendues avec nomic-embed-text).
-     * Best-effort : échec/embedding absent → null (jamais de throw vers la boucle).
+     * Embeddings (768 dims expected with nomic-embed-text).
+     * Best-effort: failure/missing embedding → null (never throws to the loop).
      */
     async embed(text: string): Promise<number[] | null> {
       try {
@@ -177,12 +177,12 @@ export function createOllamaClient(opts: OllamaClientOptions): OllamaClient {
         );
         const emb = wire.embedding;
         if (!Array.isArray(emb) || emb.some((v) => typeof v !== 'number')) {
-          opts.logger.warn({ action: 'embed.invalid' }, 'embedding invalide retourné par ollama');
+          opts.logger.warn({ action: 'embed.invalid' }, 'invalid embedding returned by ollama');
           return null;
         }
         return emb as number[];
       } catch {
-        opts.logger.warn({ action: 'embed.unavailable' }, 'embeddings ollama injoignables');
+        opts.logger.warn({ action: 'embed.unavailable' }, 'ollama embeddings unreachable');
         return null;
       }
     },

@@ -1,5 +1,5 @@
 /**
- * Helpers de test : seams en mémoire (aucun réseau, aucun pg, aucun Ollama réel).
+ * Test helpers: in-memory seams (no network, no pg, no real Ollama).
  */
 import pino, { type Logger } from 'pino';
 import type { HermesConfig } from '../src/config.js';
@@ -40,7 +40,7 @@ export function silentLogger(): Logger {
   return pino({ level: 'silent' });
 }
 
-// ---------- DbClient en mémoire ----------
+// ---------- In-memory DbClient ----------
 
 export interface MemoryDbOptions {
   killSwitchActive?: boolean;
@@ -80,7 +80,7 @@ export function makeMemoryDb(opts: MemoryDbOptions = {}): {
   return { db, memoire };
 }
 
-// ---------- Ollama stubbé ----------
+// ---------- Stubbed Ollama ----------
 
 export function makeStubOllama(chatResponses: ChatResponse[]): { ollama: OllamaClient; calls: number } {
   let calls = 0;
@@ -89,8 +89,8 @@ export function makeStubOllama(chatResponses: ChatResponse[]): { ollama: OllamaC
       const resp = chatResponses[Math.min(calls, chatResponses.length - 1)];
       calls += 1;
       if (resp === undefined || resp === null) return { toolCalls: [], text: '' };
-      // Après épuisement des réponses définies, retombe sur un fallback propre
-      // (aucune répétition de la dernière réponse, ce qui bouclerait).
+      // After the defined responses are exhausted, falls back to a clean default
+      // (no repetition of the last response, which would loop).
       if (calls > chatResponses.length) return { toolCalls: [], text: 'fallback' };
       return resp;
     },
@@ -102,7 +102,7 @@ export function makeStubOllama(chatResponses: ChatResponse[]): { ollama: OllamaC
   return { ollama, get calls() { return calls; } };
 }
 
-// ---------- Bridge stubbé (capture les POST) ----------
+// ---------- Stubbed bridge (captures POSTs) ----------
 
 export interface BridgeCapture {
   command: Record<string, unknown>;
@@ -137,7 +137,7 @@ export function makeStubBridge(outcome: string = 'applied'): {
   return { bridge, posted, approvals };
 }
 
-// ---------- Anonymizer stubbé (stub regex local, pas de réseau) ----------
+// ---------- Stubbed anonymizer (local regex stub, no network) ----------
 
 export function makeRegexAnonymizer(): Anonymizer {
   return {

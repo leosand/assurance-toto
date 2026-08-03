@@ -1,6 +1,6 @@
 /**
  * Audit append-only hash-chained: sha256(prev_hash + canonicalJson(payload)).
- * Canonique = clés triées, déterministe, JSON.stringify ordinaire.
+ * Canonical = sorted keys, deterministic, plain JSON.stringify.
  */
 import { createHash } from 'node:crypto';
 import type { Repository, Tx } from './db/repository.js';
@@ -18,7 +18,7 @@ export function computeAuditHash(prevHash: string, payload: unknown): string {
   return createHash('sha256').update(prevHash + canonical, 'utf8').digest('hex');
 }
 
-/** Append d'un entry ; on suppose enqueue sérialisé (verrou app-level). */
+/** Appends an entry; assumes enqueue is serialized (app-level lock). */
 export async function appendAudit(repo: Repository, entry: AuditEntry): Promise<{ hash: string; prevHash: string }> {
   const prevHash = await readLastHash(repo);
   const hash = computeAuditHash(prevHash, entry.payload);
@@ -27,9 +27,9 @@ export async function appendAudit(repo: Repository, entry: AuditEntry): Promise<
 }
 
 async function readLastHash(repo: Repository): Promise<string> {
-  // Le repo expose un accès "dernier hash" via une requête dédiée côté pg.
-  // En mémoire, le repo de test peut le fournir, mais on passe par l'API commune :
-  // on lit la dernière entrée via inTransaction (aucune écriture) pour rester agnostique.
+  // The repo exposes a "last hash" accessor via a dedicated pg query.
+  // In memory, the test repo can provide it, but we go through the common API:
+  // we read the last entry via inTransaction (no writes) to remain agnostic.
   const prev: string[] = [];
   await repo.inTransaction(async (tx: Tx) => {
     const r = await tx.query<{ hash: string }>(
@@ -42,7 +42,7 @@ async function readLastHash(repo: Repository): Promise<string> {
   return prev[0] ?? '';
 }
 
-/** Vérification hors-ligne : re-chaîne complète. */
+/** Offline verification: full chain re-check. */
 export async function verifyAuditChain(repo: Repository): Promise<{ ok: boolean; brokenAt?: number; reason?: string }> {
   const rows: { seq: number; prev_hash: string | null; hash: string; payload: string }[] = [];
   await repo.inTransaction(async (tx: Tx) => {
@@ -70,7 +70,7 @@ export async function verifyAuditChain(repo: Repository): Promise<{ ok: boolean;
       return { ok: false, brokenAt: row.seq, reason: 'prev_hash mismatch' };
     }
     if (row.hash !== expectedHash) {
-      return { ok: false, brokenAt: row.seq, reason: 'hash mismatch (payload altéré ?)' };
+      return { ok: false, brokenAt: row.seq, reason: 'hash mismatch (tampered payload?)' };
     }
     prev = row.hash;
   }

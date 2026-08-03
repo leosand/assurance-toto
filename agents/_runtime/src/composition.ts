@@ -1,7 +1,7 @@
 /**
- * Composition root : câble Db / Ollama / Bridge / Sécurité / Privacy / Skills,
- * expose createAgentFrom() pour les tests (seams injectées) et buildRuntime()
- * pour la prod (env réel).
+ * Composition root: wires Db / Ollama / Bridge / Security / Privacy / Skills,
+ * exposes createAgentFrom() for tests (injected seams) and buildRuntime()
+ * for production (real env).
  */
 import { join } from 'node:path';
 import type { Logger } from 'pino';
@@ -26,7 +26,7 @@ export interface Runtime {
   close(): Promise<void>;
 }
 
-/** Construit l'agent à partir de seams injectées (tests/démo). */
+/** Builds the agent from injected seams (tests/demo). */
 export function createAgentFrom(
   cfg: HermesConfig,
   logger: Logger,
@@ -66,7 +66,7 @@ export function createAgentFrom(
   return { agent, tools, killSwitch, allowlist };
 }
 
-/** Runtime de production : pg réel, ollama local, bridge réel. */
+/** Production runtime: real pg, local ollama, real bridge. */
 export async function buildRuntime(source: NodeJS.ProcessEnv = process.env): Promise<Runtime> {
   const cfg = loadConfig(source);
   const logger = makeLogger(cfg);
@@ -90,7 +90,7 @@ export async function buildRuntime(source: NodeJS.ProcessEnv = process.env): Pro
   const allowlist = await loadAllowlist(allowlistPath);
   logger.info(
     { action: 'startup.allowlist', tools: [...allowlist.tools] },
-    'allowlist agent chargée',
+    'agent allowlist loaded',
   );
 
   const skills = await loadSkills(cfg.skillsDir, logger);

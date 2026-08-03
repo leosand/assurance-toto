@@ -57,7 +57,7 @@ function fixture(opts?: { sinistres?: { id: string; statut: string; montant_eur:
 }
 
 function inbound(content: unknown, author = CEO_HEX, over: Partial<InboundCommandEnvelope> = {}): InboundCommandEnvelope {
-  // Les tests pipeline internes simulent l'amont BuzzAdapter : la signature a déjà été vérifiée.
+  // Internal pipeline tests simulate the BuzzAdapter upstream: the signature was already verified.
   return {
     eventId: `http-test-${Math.random().toString(36).slice(2)}`,
     authorPubkey: author,
@@ -81,18 +81,18 @@ function validApproveCmd(over: Record<string, unknown> = {}): Record<string, unk
 }
 
 describe('pipeline — cycle complet', () => {
-  it('claim.settlement.approve → executed + effet P&L + message Buzz posté', async () => {
+  it('claim.settlement.approve → executed + P&L effect + Buzz message posted', async () => {
     const { deps, state, adapter } = fixture();
     const r = await processInboundCommand(deps, inbound(validApproveCmd()));
     expect(r.outcome).toBe('executed');
-    // P&L : ligne reglement négative émise avec le même correlation_id
+    // P&L: negative claim-settlement line emitted with the same correlation_id
     expect(state.pnl).toHaveLength(1);
     expect(state.pnl[0]!.categorie).toBe('reglement');
     expect(state.pnl[0]!.montant).toBe(-4000);
     expect(state.pnl[0]!.correlation_id).toBe(r.correlationId);
-    // sinistre passé à "regle"
+    // sinistre moved to "regle"
     expect(state.sinistres.get('CLM-1')!.statut).toBe('regle');
-    // message retour posté sur le bon canal avec le même correlation_id
+    // reply message posted on the right channel with the same correlation_id
     expect(adapter.capture()).toHaveLength(1);
     expect(adapter.capture()[0]!.correlationId).toBe(r.correlationId);
     expect(adapter.capture()[0]!.text).toContain(r.correlationId);
@@ -102,7 +102,7 @@ describe('pipeline — cycle complet', () => {
     expect(actions).toContain('command.executed');
   });
 
-  it('idempotence : même commande deux fois → la seconde est refusée', async () => {
+  it('idempotence: same command twice → the second is denied', async () => {
     const { deps, state } = fixture();
     const cmd = validApproveCmd();
     const content = JSON.stringify(cmd);
@@ -115,9 +115,9 @@ describe('pipeline — cycle complet', () => {
     expect(state.pnl).toHaveLength(1);
   });
 
-  it('kill-switch actif bloque l\'exécution autonome (claim settle)', async () => {
+  it('active kill-switch blocks autonomous execution (claim settle)', async () => {
     const { deps, state, dlq } = fixture({ killActif: true });
-    // killswitch lève (retryable=false) → outcome 'dlq', rien n'est exécuté
+    // killswitch throws (retryable=false) → outcome 'dlq', nothing is executed
     const r = await processInboundCommand(deps, inbound(validApproveCmd()));
     expect(r.outcome).toBe('dlq');
     expect(state.pnl).toHaveLength(0);
@@ -126,7 +126,7 @@ describe('pipeline — cycle complet', () => {
     expect(entries[0]!.reason).toContain('kill-switch');
   });
 
-  it('kill-switch actif : agent.killswitch.deactivate passe toujours', async () => {
+  it('active kill-switch: agent.killswitch.deactivate always passes', async () => {
     const { deps, state } = fixture({ killActif: true });
     const r = await processInboundCommand(
       deps,
@@ -136,7 +136,7 @@ describe('pipeline — cycle complet', () => {
     expect(state.killSwitch?.actif).toBe(false);
   });
 
-  it('correlation_id propagate: fourni → ré-utilisé dans audit + pnl + message', async () => {
+  it('correlation_id propagate: provided → reused in audit + pnl + message', async () => {
     const { deps, state, adapter } = fixture();
     const cid = '11111111-2222-4333-8444-555555555555';
     const r = await processInboundCommand(deps, inbound(validApproveCmd(), CEO_HEX, { correlationId: cid }));
@@ -156,20 +156,20 @@ describe('pipeline — cycle complet', () => {
     expect(state.audit.some((a) => a.action === 'command.schema_invalid')).toBe(true);
   });
 
-  it('policy deny (rôle non-CEO) → denied sans effet', async () => {
+  it('policy deny (non-CEO role) → denied with no effect', async () => {
     const { deps, state } = fixture();
-    // ACL : ni CEO, ni agent-sinistres allowlisté → 'inconnu' refusé par la politique.
+    // ACL: neither CEO nor allowlisted agent-sinistres → 'unknown' denied by the policy.
     const r = await processInboundCommand(deps, inbound(validApproveCmd(), SALES_HEX));
     expect(r.outcome).toBe('denied');
     expect(r.reason).toContain('rbac');
     expect(state.pnl).toHaveLength(0);
   });
 
-  it('montant > plafond demandé → denied', async () => {
+  it('amount > requested cap → denied', async () => {
     const { deps, state } = fixture({
       sinistres: [{ id: 'CLM-BIG', statut: 'ouvert', montant_eur: 99000, compliance_bloque: false }],
     });
-    // CEO signé mais max_amount_eur sous-dimensionné (4000 < 99000) → deny montant.
+    // Signed CEO but undersized max_amount_eur (4000 < 99000) → amount deny.
     const r = await processInboundCommand(
       deps,
       inbound(validApproveCmd({ claim_id: 'CLM-BIG', max_amount_eur: 4000, approved_by: CEO_HEX }), CEO_HEX, { signed: true }),
@@ -179,13 +179,13 @@ describe('pipeline — cycle complet', () => {
     expect(state.pnl).toHaveLength(0);
   });
 
-  it('audit chain est intègre et tamper est détecté', async () => {
+  it('audit chain is intact and tampering is detected', async () => {
     const { deps, state } = fixture();
     await processInboundCommand(deps, inbound(validApproveCmd()));
     await processInboundCommand(deps, inbound({ type: 'finance.report.request', periode: '2026-07', departements: ['auto'], approved_by: CEO_HEX, requested_at: '2026-08-02T01:00:00.000Z' }));
     const v1 = await verifyAuditChain(deps.repo);
     expect(v1.ok).toBe(true);
-    // Falsifie une entrée au milieu → détection.
+    // Tamper with an entry in the middle → detection.
     if (state.audit.length >= 2) {
       state.audit[0]!.payload = '{"tampered":true}';
       const v2 = await verifyAuditChain(deps.repo);
@@ -202,8 +202,8 @@ describe('pipeline — cycle complet', () => {
   });
 });
 
-describe('pipeline — autonomie agent + anti-forgery (§6A/§6B)', () => {
-  it('agent sinistres allowlisté sous le seuil → executed (self-settlement)', async () => {
+describe('pipeline — agent autonomy + anti-forgery (§6A/§6B)', () => {
+  it('allowlisted claims agent under the threshold → executed (self-settlement)', async () => {
     const { deps, state } = fixture();
     const r = await processInboundCommand(
       deps,
@@ -214,7 +214,7 @@ describe('pipeline — autonomie agent + anti-forgery (§6A/§6B)', () => {
     expect(state.sinistres.get('CLM-1')!.statut).toBe('regle');
   });
 
-  it('agent sinistres allowlisté AU-DESSUS du seuil → denied rbac:au_dessus_seuil_reserve_CEO', async () => {
+  it('allowlisted claims agent ABOVE the threshold → denied rbac:au_dessus_seuil_reserve_CEO', async () => {
     const { deps, state } = fixture({
       sinistres: [{ id: 'CLM-BIG', statut: 'ouvert', montant_eur: 9000, compliance_bloque: false }],
     });

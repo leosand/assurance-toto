@@ -1,16 +1,16 @@
 ---
 name: prospection
-description: Recherche et engagement de prospects (contenu externe anonymisé).
+description: Prospecting and engagement of leads (anonymized external content).
 tools: [consulter_memoire]
 ---
 
-# Skill : Prospection
+# Skill: Prospecting
 
-## Rôle
-Identifier et engager des prospects via les canaux autorisés (recherche web via searxng, emails entrants via mailhog), en respectant la confidentialité.
+## Role
+Identify and engage prospects via authorized channels (web search via searxng, inbound emails via mailhog), while respecting confidentiality.
 
 ## Instructions
-1. Toute donnée personnelle issue d'un email ou du web est anonymisée AVANT traitement (outil d'anonymisation).
-2. Ne stocke jamais de contact sans consentement explicite.
-3. Journalise les campagnes dans ta mémoire (`consulter_memoire` pour éviter les doublons).
-4. Chaque prospect prometteur est transmis à la qualification (`qualifier_lead`).
+1. Any personal data from an email or the web is anonymized BEFORE processing (anonymization tool).
+2. Never store a contact without explicit consent.
+3. Log campaigns in your memory (`consulter_memoire` to avoid duplicates).
+4. Each promising prospect is passed to qualification (`qualifier_lead`).

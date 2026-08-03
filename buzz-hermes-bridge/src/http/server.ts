@@ -17,9 +17,9 @@ import { processInboundCommand, type PipelineDeps, type PipelineResult, type Inb
 import { verifyAuditChain } from '../audit.js';
 import { renderDashboard } from '../dashboard/dashboard.js';
 
-// ---------- Zod validation des entrées HTTP ----------
+// ---------- Zod validation of HTTP inputs ----------
 const HttpCommandBodySchema = z.object({
-  command: z.unknown(), // le contenu JSON de la commande (sera validé par ajv)
+  command: z.unknown(), // the JSON command content (will be validated by ajv)
   author_pubkey: z.string().min(1).max(128),
   event: z.object({
     id: z.string(),
@@ -55,9 +55,9 @@ const HttpKillswitchBodySchema = z.object({
   reason: z.string().max(500).optional().default(''),
 });
 
-// Escalade agent → CEO : création d'une approbation 'en_attente' (brief §6B).
-// Un règlement au-dessus du seuil ne s'auto-approuve pas : l'agent crée ici la
-// demande qui apparaît dans GET /approvals (dashboard CEO).
+// Agent → CEO escalation: creation of an 'en_attente' approval (brief §6B).
+// A settlement above the threshold cannot self-approve: the agent creates here the
+// request that appears in GET /approvals (CEO dashboard).
 const HttpApprobationCreateSchema = z.object({
   type: z.literal('claim.settlement.approve'),
   claim_id: z.string().min(1).max(64),
@@ -67,7 +67,7 @@ const HttpApprobationCreateSchema = z.object({
   correlation_id: z.string().uuid(),
 });
 
-// Usine async (pour pouvoir brancher Redis conditionnellement à la construction).
+// Async factory (to be able to wire Redis conditionally at construction time).
 export async function buildServer(cfg: BridgeConfig, overrides?: { repo?: Repository; dlq?: DlqSink }): Promise<FastifyInstance> {
   const logger = pino({ level: process.env['LOG_LEVEL'] ?? 'info' });
   const app = Fastify({ logger: false });
@@ -82,8 +82,8 @@ export async function buildServer(cfg: BridgeConfig, overrides?: { repo?: Reposi
       return p;
     }
   });
-  // Allowlist agents non-signés normalisée en hex (anti-forgery : un npub CEO
-  // listé ici serait de toute façon refusé par la règle rbac:ceo_sans_signature).
+  // Unsigned-agent allowlist normalized to hex (anti-forgery: a CEO npub
+  // listed here would be denied anyway by the rbac:ceo_sans_signature rule).
   const allowedUnsignedRolesHex = cfg.allowedUnsignedRoles.map((p) => {
     try {
       return normalizePubkey(p);
@@ -99,8 +99,8 @@ export async function buildServer(cfg: BridgeConfig, overrides?: { repo?: Reposi
   // ---------- Cockpit CEO (ADR-002 — cockpit lean, 100 % lecture Postgres) ----------
   const ceoPubkeyForm = cfg.bridgeCeoPubkeys[0] ?? '';
 
-  // Les formulaires HTML du cockpit postent en application/x-www-form-urlencoded :
-  // on les recopie dans body AVANT les handlers JSON (zod), sans ajouter de plugin.
+  // Cockpit HTML forms post as application/x-www-form-urlencoded:
+  // we copy them into body BEFORE the JSON handlers (zod), without adding a plugin.
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => {
     const obj: Record<string, unknown> = {};
     for (const [k, v] of new URLSearchParams(String(body))) obj[k] = v;
@@ -110,8 +110,8 @@ export async function buildServer(cfg: BridgeConfig, overrides?: { repo?: Reposi
   const wantsHtml = (accept: string | undefined): boolean => (accept ?? '').includes('text/html');
   const toBool = (v: unknown): unknown => (v === 'true' ? true : v === 'false' ? false : v);
 
-  // DÉMO : la page elle-même est la surface de décision CEO. En production,
-  // /decide et /killswitch exigent un event Nostr signé (cf. bloc anti-forgery).
+  // DEMO: the page itself is the CEO decision surface. In production,
+  // /decide and /killswitch require a signed Nostr event (cf. anti-forgery block).
   app.get('/dashboard', async (req, reply) => {
     const q = req.query as { correlation_id?: string; msg?: string };
     try {
@@ -125,9 +125,9 @@ export async function buildServer(cfg: BridgeConfig, overrides?: { repo?: Reposi
     } catch (err) {
       req.log.error({ err }, 'dashboard render failed');
       return reply
-        .code(200) // cockpit démo : jamais de 500, un message clair suffit
+        .code(200) // demo cockpit: never a 500, a clear message is enough
         .header('content-type', 'text/html; charset=utf-8')
-        .send('<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta http-equiv="refresh" content="30"><title>Cockpit indisponible</title></head><body style="font-family:sans-serif;background:#0e1116;color:#dbe2ec;padding:40px"><h1>Cockpit indisponible</h1><p>La base de données ne répond pas. Réessaie dans quelques secondes.</p></body></html>');
+        .send('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="30"><title>Cockpit unavailable</title></head><body style="font-family:sans-serif;background:#0e1116;color:#dbe2ec;padding:40px"><h1>Cockpit unavailable</h1><p>The database did not respond. Please retry in a few seconds.</p></body></html>');
     }
   });
 
@@ -151,10 +151,10 @@ export async function buildServer(cfg: BridgeConfig, overrides?: { repo?: Reposi
     return { approvals: rows };
   });
 
-  // Escalade agent → CEO (brief §6B) : crée une demande 'en_attente' visible
-  // dans GET /approvals. Réservé aux npubs connus (CEO OU agents allowlistés) —
-  // un inconnu ne peut pas spammer la file d'approbation. La signature n'est pas
-  // exigée : on crée une DEMANDE, pas une décision (celle-ci exige le CEO).
+  // Agent → CEO escalation (brief §6B): creates an 'en_attente' request visible
+  // in GET /approvals. Restricted to known npubs (CEO OR allowlisted agents) —
+  // a stranger cannot spam the approval queue. The signature is not
+  // required: we create a REQUEST, not a decision (that one requires the CEO).
   app.post('/approvals', async (req, reply) => {
     const parsed = HttpApprobationCreateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ ok: false, error: 'body.invalid', details: parsed.error.issues });
@@ -181,9 +181,9 @@ export async function buildServer(cfg: BridgeConfig, overrides?: { repo?: Reposi
     const validated = validateCommand(body.command);
     if (!validated.ok) return reply.code(400).send({ ok: false, error: 'schema.invalid', details: validated.errors });
 
-    // Si l'appelant joint un event Nostr signé (kind 9), on vérifie la signature et on
-    // substitue l'autorité = pubkey signée. Sans event, on fonctionne en mode démo/doc :
-    // la RBAC reste appliquée côté politique (npubs CEO en config) sur author_pubkey.
+    // If the caller attaches a signed Nostr event (kind 9), we verify the signature and
+    // substitute authority = signed pubkey. Without an event, we run in demo/doc mode:
+    // RBAC stays applied at the policy layer (config CEO npubs) on author_pubkey.
     const signed = body.event !== undefined;
     if (body.event !== undefined) {
       const check = verifySignedEventForCommand(body.event as SignedEventInput, validated.command);
@@ -191,8 +191,8 @@ export async function buildServer(cfg: BridgeConfig, overrides?: { repo?: Reposi
       body.author_pubkey = check.authorHex;
     }
 
-    // requireSignedCommands (PROD) : les actions à effet réservées au CEO
-    // (reject, pricing exception, kill-switch) exigent une signature Nostr.
+    // requireSignedCommands (PROD): the CEO-reserved effect actions
+    // (reject, pricing exception, kill-switch) require a Nostr signature.
     if (cfg.requireSignedCommands && !signed && requiresCeo(validated.command.type)) {
       return reply.code(401).send({ ok: false, error: 'auth:ceo_sans_signature_valide' });
     }
@@ -218,11 +218,11 @@ export async function buildServer(cfg: BridgeConfig, overrides?: { repo?: Reposi
     if (!parsed.success) return reply.code(400).send({ ok: false, error: 'body.invalid', details: parsed.error.issues });
     const body = parsed.data;
 
-    // Identité CEO : si un event signé est fourni il l'emporte ; sinon on exige un npub whitelisté.
+    // CEO identity: if a signed event is provided it takes precedence; otherwise we require a whitelisted npub.
     let decidedBy = body.decided_by;
     if (body.event !== undefined) {
       const signed = body.event as SignedEventInput;
-      // Vérifie seulement la signature (décision humaine libre de son contenu).
+      // Only verifies the signature (human decision free-form content).
       try {
         if (!verifyEvent(signed as VerifiedEvent)) return reply.code(401).send({ ok: false, error: 'signature.invalid' });
         decidedBy = signed.pubkey.toLowerCase();
@@ -236,18 +236,18 @@ export async function buildServer(cfg: BridgeConfig, overrides?: { repo?: Reposi
     }
     const updated = await repo.decideApprobation(params.correlationId, decidedHex, body.reason, body.approve);
     if (updated === null) {
-      if (html) return reply.redirect(`/dashboard?correlation_id=${encodeURIComponent(params.correlationId)}&msg=${encodeURIComponent('Décision refusée : déjà traitée ou introuvable')}`);
+      if (html) return reply.redirect(`/dashboard?correlation_id=${encodeURIComponent(params.correlationId)}&msg=${encodeURIComponent('Decision refused: already processed or not found')}`);
       return reply.code(409).send({ ok: false, error: 'already_decided_or_missing' });
     }
 
-    // §6B : toute approbation 'approuve' sur 'claim.settlement.approve' exécute
-    // immédiatement le règlement effectif (nouveau correlation_id lié).
+    // §6B: every 'approuve' approval on 'claim.settlement.approve' executes
+    // the actual settlement immediately (linked new correlation_id).
     if (body.approve && updated.type === 'claim.settlement.approve' && updated.montant_eur !== null) {
       const cmd: Command = {
         type: 'claim.settlement.approve',
         claim_id: updated.claim_id ?? updated.correlation_id,
         max_amount_eur: Number(updated.montant_eur),
-        reason: `Exécution après approbation CEO « ${body.reason.slice(0, 100)} »`,
+        reason: `Execution after CEO approval “ ${body.reason.slice(0, 100)} ”`,
         approved_by: decidedHex,
         requested_at: new Date().toISOString(),
       };
@@ -263,8 +263,8 @@ export async function buildServer(cfg: BridgeConfig, overrides?: { repo?: Reposi
     }
 
     if (html) {
-      const verdict = body.approve ? 'approuvée' : 'refusée';
-      return reply.redirect(`/dashboard?correlation_id=${encodeURIComponent(params.correlationId)}&msg=${encodeURIComponent(`Demande ${verdict}`)}`);
+      const verdict = body.approve ? 'approved' : 'denied';
+      return reply.redirect(`/dashboard?correlation_id=${encodeURIComponent(params.correlationId)}&msg=${encodeURIComponent(`Request ${verdict}`)}`);
     }
     return reply.send({ ok: true, approbation: updated });
   });
@@ -293,7 +293,7 @@ export async function buildServer(cfg: BridgeConfig, overrides?: { repo?: Reposi
       channelUuid: defaultChannel(cfg),
     });
     if (html) {
-      return reply.redirect(`/dashboard?msg=${encodeURIComponent(body.active ? 'Kill-switch ACTIVÉ' : 'Kill-switch désactivé')}`);
+      return reply.redirect(`/dashboard?msg=${encodeURIComponent(body.active ? 'Kill-switch ACTIVATED' : 'Kill-switch deactivated')}`);
     }
     return reply.send({ ok: true, actif: body.active });
   });
@@ -306,7 +306,7 @@ export async function buildServer(cfg: BridgeConfig, overrides?: { repo?: Reposi
 }
 
 function defaultChannel(cfg: BridgeConfig): string {
-  // Channel dédié par défaut : constante du bridge (canal de statut des commandes).
+  // Default dedicated channel: bridge constant (command status channel).
   void cfg;
   return '00000000-0000-1000-8000-000000000001';
 }
@@ -320,8 +320,8 @@ function safeNorm(input: string): string {
 }
 
 function makeDlq(cfg: BridgeConfig, logger: pino.Logger): DlqSink {
-  // Redis optionnel : en démo sans Redis on reste en mémoire.
+  // Optional Redis: in demo without Redis we stay in-memory.
   void cfg;
-  logger.info('DLQ in-memory (Redis non branché dans cette build)');
+  logger.info('DLQ in-memory (Redis not wired in this build)');
   return new MemoryDlq();
 }

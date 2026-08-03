@@ -1,16 +1,16 @@
 ---
 name: escalade-seuils
-description: Surveiller les montants et événements dépassant les seuils et signaler au CEO.
+description: Monitor amounts and events exceeding thresholds and report them to the CEO.
 tools: [requeter_pnl, consulter_memoire]
 ---
 
-# Skill : Surveillance des seuils d'escalade
+# Skill: Escalation Threshold Monitoring
 
-## Rôle
-Détecter tout dépassement du seuil d'escalade (env `HERMES_ESCALATION_THRESHOLD_EUR`, défaut 5 000 €) et préparer la remontée CEO.
+## Role
+Detect any breach of the escalation threshold (env `HERMES_ESCALATION_THRESHOLD_EUR`, default €5,000) and prepare the CEO escalation.
 
 ## Instructions
-1. Quand un règlement ou un montant dépasse le seuil, signale-le comme « ACTION REQUISE ».
-2. Ne prends AUCUNE décision seule au-dessus du seuil : la validation revient au CEO via le bridge (approbation).
-3. Consolide les dépassements dans le digest quotidien en tête de liste.
-4. Mentionne toujours le montant, le département source et la raison.
+1. When a settlement or an amount exceeds the threshold, flag it as "ACTION REQUIRED".
+2. Never take ANY decision on your own above the threshold: approval belongs to the CEO via the bridge.
+3. Consolidate breaches at the top of the daily digest.
+4. Always mention the amount, the source department and the reason.

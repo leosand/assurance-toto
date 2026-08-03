@@ -1,14 +1,14 @@
-# Scénario 06 — Choc Géopolitique (Stress-Test)
+# Scenario 06 — Geopolitical Shock (Stress Test)
 
 ## Injection
-Simuler manuellement (ou attendre une variation réelle) une hausse significative de l'indice GPR récupéré via `mcp-macro-wrapper`.
+Manually simulate (or wait for a real variation) a significant rise in the GPR index retrieved via `mcp-macro-wrapper`.
 
-## Résultat attendu en cascade
-1. `agent-finance` détecte la hausse du GPR lors du calcul hebdomadaire → `gpr_normalise` augmente, réduisant la marge ajustée.
-2. `agent-marketing` reçoit l'alerte et réduit automatiquement le budget d'acquisition (prudence).
-3. `agent-sinistres-contentieux` applique une provision de réassurance légèrement supérieure sur les nouveaux dossiers.
-4. `agent-rh` gèle les propositions d'embauche simulées en attendant stabilisation.
-5. Le rapport hebdomadaire affiche un badge d'alerte rouge avec recommandations automatiques au CEO.
+## Expected cascade outcome
+1. `agent-finance` detects the GPR rise during the weekly computation → `gpr_normalise` increases, shrinking the adjusted margin.
+2. `agent-marketing` receives the alert and automatically reduces the acquisition budget (caution).
+3. `agent-sinistres-contentieux` applies a slightly higher reinsurance provision on new files.
+4. `agent-rh` freezes simulated hiring proposals until stabilization.
+5. The weekly report shows a red alert badge with automatic recommendations to the CEO.
 
-## Objectif pédagogique
-Démontrer la réactivité systémique du jumeau numérique à un facteur macro-économique 100% réel et externe, sans intervention humaine autre que la lecture du rapport final.
+## Teaching objective
+Demonstrate the systemic reactivity of the digital twin to a 100% real, external macro-economic factor, with no human intervention other than reading the final report.

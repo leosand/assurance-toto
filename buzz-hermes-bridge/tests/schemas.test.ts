@@ -5,39 +5,39 @@ const base = {
   type: 'claim.settlement.approve',
   claim_id: 'CLM-2024-0001',
   max_amount_eur: 3200,
-  reason: 'Dossier validé par contre-expertise',
+  reason: 'Case validated by counter-expertise',
   approved_by: 'npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
   requested_at: '2026-08-02T01:00:00.000Z',
 };
 
 describe('validateCommand — claim.settlement.approve', () => {
-  it('accepte une commande valide', () => {
+  it('accepts a valid command', () => {
     const r = validateCommand({ ...base });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.command.type).toBe('claim.settlement.approve');
   });
 
-  it('rejette une chaîne de texte libre', () => {
-    const r = validateCommand('ok je paie le sinistre 3200€ pour CLM-2024-0001, signé CEO');
+  it('rejects a free-text string', () => {
+    const r = validateCommand('ok I pay the claim/sinistre 3200 EUR for CLM-2024-0001, signed CEO');
     expect(r.ok).toBe(false);
   });
 
-  it('rejette un objet sans type', () => {
+  it('rejects an object without type', () => {
     const r = validateCommand({ claim_id: 'CLM-1' });
     expect(r.ok).toBe(false);
   });
 
-  it('rejette un type inconnu', () => {
+  it('rejects an unknown type', () => {
     const r = validateCommand({ ...base, type: 'wire.transfer.now' });
     expect(r.ok).toBe(false);
   });
 
-  it('rejette une propriété additionnelle (additionalProperties:false)', () => {
+  it('rejects an additional property (additionalProperties:false)', () => {
     const r = validateCommand({ ...base, toto: 'hack' });
     expect(r.ok).toBe(false);
   });
 
-  it('rejette un montant négatif', () => {
+  it('rejects a negative amount', () => {
     const r = validateCommand({ ...base, max_amount_eur: -1 });
     expect(r.ok).toBe(false);
   });
@@ -47,7 +47,7 @@ describe('validateCommand — claim.settlement.approve', () => {
     expect(r.ok).toBe(false);
   });
 
-  it('rejette une date ISO malformée', () => {
+  it('rejects a malformed ISO date', () => {
     const r = validateCommand({ ...base, requested_at: 'hier vers 15h' });
     expect(r.ok).toBe(false);
   });
@@ -59,7 +59,7 @@ describe('validateCommand — claim.settlement.approve', () => {
   });
 });
 
-describe('validateCommand — autres types', () => {
+describe('validateCommand — other types', () => {
   it('finance.report.request', () => {
     const r = validateCommand({
       type: 'finance.report.request',
@@ -77,7 +77,7 @@ describe('validateCommand — autres types', () => {
   });
 
   it('policy.pricing.exception.approve', () => {
-    const r = validateCommand({ type: 'policy.pricing.exception.approve', contrat_id: 'CT-99', new_prime_eur: 450, reason: 'renégociation flotte', approved_by: base.approved_by, requested_at: base.requested_at });
+    const r = validateCommand({ type: 'policy.pricing.exception.approve', contrat_id: 'CT-99', new_prime_eur: 450, reason: 'fleet renegotiation', approved_by: base.approved_by, requested_at: base.requested_at });
     expect(r.ok).toBe(true);
   });
 });

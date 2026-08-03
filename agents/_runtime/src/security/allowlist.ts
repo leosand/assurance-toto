@@ -1,15 +1,15 @@
 /**
- * Allowlist d'outils par agent : deny-by-default.
- * Source : fichier JSON par département (`mcp-allowlist.json`), dont le chemin
- * est passé au runtime via `HERMES_ALLOWLIST_PATH` (défaut `./mcp-allowlist.json`).
- * Un agent sans fichier d'allowlist = aucun outil autorisé.
+ * Per-agent tool allowlist: deny-by-default.
+ * Source: per-department JSON file (`mcp-allowlist.json`), whose path is
+ * passed to the runtime via `HERMES_ALLOWLIST_PATH` (default `./mcp-allowlist.json`).
+ * An agent without an allowlist file = no authorized tool.
  */
 import { readFile } from 'node:fs/promises';
 
 export interface AllowlistFile {
-  /** Outils internes Hermes autorisés (registry tools). */
+  /** Authorized internal Hermes tools (registry tools). */
   tools?: string[];
-  /** Serveurs MCP accessibles (usage via la gateway). */
+  /** Accessible MCP servers (usage via the gateway). */
   mcp_servers?: string[];
 }
 
@@ -31,7 +31,7 @@ export function createAllowlist(file: AllowlistFile | null): Allowlist {
   };
 }
 
-/** Charge l'allowlist depuis un chemin JSON ; absence du fichier = deny-all. */
+/** Loads the allowlist from a JSON path; missing file = deny-all. */
 export async function loadAllowlist(path: string): Promise<Allowlist> {
   try {
     const raw = JSON.parse(await readFile(path, 'utf8')) as unknown;
@@ -44,7 +44,7 @@ export async function loadAllowlist(path: string): Promise<Allowlist> {
   }
 }
 
-/** Deny-by-default : outil non listé = refusé (jamais exécuté). */
+/** Deny-by-default: unlisted tool = denied (never executed). */
 export function assertAllowed(allowlist: Allowlist, toolName: string): void {
   if (!allowlist.tools.has(toolName)) {
     throw new ToolNotAllowedError(toolName);
@@ -57,7 +57,7 @@ export function isAllowed(allowlist: Allowlist, toolName: string): boolean {
 
 export class ToolNotAllowedError extends Error {
   constructor(public readonly toolName: string) {
-    super(`Outil refusé par l'allowlist : ${toolName}`);
+    super(`Tool denied by allowlist: ${toolName}`);
     this.name = 'ToolNotAllowedError';
   }
 }

@@ -1,11 +1,11 @@
 /**
- * Couche d'accès Postgres. Seam étroite : toutes les requêtes métier vivent ici,
- * jamais dans la boucle agent ni dans les outils. Les tests injectent une
- * implémentation en mémoire — aucun pg réel requis hors prod.
+ * Postgres access layer. Narrow seam: all business queries live here,
+ * never in the agent loop or the tools. Tests inject an in-memory
+ * implementation — no real pg required outside prod.
  *
- * Règle dure : les agents Hermes NE MODIFIENT PAS les données métier.
- * Écritures autorisées : `memoire_agents` uniquement (apprentissage propre).
- * Tout effet transactionnel passe par le bridge (POST /commands).
+ * Hard rule: Hermes agents DO NOT MODIFY business data.
+ * Allowed writes: `memoire_agents` only (own learning).
+ * Every transactional effect goes through the bridge (POST /commands).
  */
 import { Pool, type QueryResultRow } from 'pg';
 
@@ -63,7 +63,7 @@ export class PgDbClient implements DbClient {
     embedding: number[],
     limit: number,
   ): Promise<MemoireEntry[]> {
-    // Similarité cosinus pgvector : mémoire du département + mémoire partagée.
+    // pgvector cosine similarity: department memory + shared memory.
     const r = await this.pool.query<MemoireEntry>(
       `SELECT id::text, nature, contenu, correlation_id::text, created_at::text,
               1 - (embedding <=> $1::vector) AS score
@@ -100,7 +100,7 @@ export class PgDbClient implements DbClient {
       );
       return r.rows[0]?.id ?? null;
     } catch {
-      // La mémoire est un best-effort : son échec ne doit jamais bloquer la tâche.
+      // Memory is best-effort: its failure must never block the task.
       return null;
     }
   }

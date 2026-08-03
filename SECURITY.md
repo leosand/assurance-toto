@@ -1,98 +1,99 @@
-# Sécurité — Assurance Toto (Compliance-oriented by design)
+# Security — Assurance Toto (Compliance-oriented by design)
 
-## Positionnement officiel (obligatoire à toute démo client)
+## Official positioning (mandatory in every client demo)
 
-> **Ceci n'est PAS un système de production certifié ACPR/RGPD.** C'est un **démonstrateur technique et commercial** — construit selon les principes transposables en production, hébergé localement, sur des données 100 % synthétiques — **sandbox-ready**, jamais **données réelles**.
+> **This is NOT an ACPR/RGPD-certified production system.** It is a **technical and commercial demo** — built on production-transposable principles, hosted locally, on 100% synthetic data — **sandbox ready**, never **real data**. **Not certified ACPR/RGPD.**
 
-## 1. Modèle de menace
+## 1. Threat model
 
-| Menace | Source | Impact | Mitigation implémentée |
+| Threat | Source | Impact | Mitigation implemented |
 |---|---|---|---|
-| **Exécution non autorisée** d'une commande sensible (règlement de sinistre, kill-switch, modification tarif) | Injection/prompt-injection depuis une conversation Buzz, ou npub non whitelisté, ou cycle Hermes errant | Perte financière, fraude, chaîne de traitement d'astreinte | **Policy enforcement bridge** : RBAC + ABAC, seuils monétaires durcis, signature Nostr vérifiée + schéma strict, idempotence (`commandes_consommees` UNIQUE) |
-| **Autonomie non contrôlée** des agents | Boucle skill sans supervisión, force brute sur `POST /commands` | Décisions erronées irréversibles (règlements > seuil) | **Kill-switch CEO** : ligne unique `kill_switch.actif=true` à single row, stop toute exécution avant toute action autonome ; `BRIDGE REQUIRE_SIGNED_COMMANDS=true` en PROD (CEO signe toute action à décision); `HERMES_ESCALATION_THRESHOLD_EUR` default 5 000 € (approbation humaine requise au-delà) |
-| **PII dans prompts/logs** | Coordonnées personnelles envoyées au LLM ou Buzz | Données personnelles répères (identifiants, clarté sur transaction RDGPD) | **Presidio** avant chaque LLM/prompt/Buzz published message ; regex fallback si down ; `logger` supprimé des champs sensibles |
-| **Clés Nostr compromises** | Fuite de private key (nsec) dans logs/git | Changement d'identité, falsification/audit log | `.env.buzz` (chmod 600, gitignored), rotation facile via `bootstrap-buzz.sh`, `relay signature validation` ; aucune clé privée dans l'image Docker ; `git filter-repo` recommandé en cas de breach réel |
-| **Génération de commandes non-structurées** | Prompt injection depuis texte libre Buzz | Exécution non maîtrisée | **JSON Schema strict** (`additionalProperties:false`) — texte libre **jamais** exécuté (rejeter au dernier niveau) |
-| **Attaque par rejeu** (replay) | Même commande envoyée consécutivement | Double règlement, double déduction P&L | `commandes_consommees` UNIQUE (hash content) — renvoi verrouillé `idempotent` → `200 consumed` |
-| **Man-in-the-middle Buzz↔Bridge** | Modification en cours d'envoi de command/Effet métier | Actions falsifiées | Buzz : NIP-98 header Nostr `<base64-signed>` (identité expéditeur cryptographiquement validée) ; bridge verify heures « Authorization Nostr » header |
+| **Unauthorized execution** of a sensitive command (claim settlement, kill-switch, pricing modification) | Injection/prompt-injection from a Buzz conversation, or a non-whitelisted npub, or a stray Hermes cycle | Financial loss, fraud, forced processing chain | **Bridge policy enforcement**: RBAC + ABAC, hardened amount thresholds, verified Nostr signature + strict schema, idempotency (`commandes_consommees` UNIQUE) |
+| **Uncontrolled autonomy** of agents | Skill loop without supervision, brute force on `POST /commands` | Irreversible bad decisions (> threshold settlements) | **CEO kill-switch**: single row `kill_switch.actif=true`, stops all execution before any autonomous action; `BRIDGE_REQUIRE_SIGNED_COMMANDS=true` in PROD (CEO signs every decision); `HERMES_ESCALATION_THRESHOLD_EUR` default 5,000 € (human approval required above) |
+| **PII in prompts/logs** | Personal details sent to the LLM or Buzz | Personal data breach (identifiers, clarity on an RGPD transaction) | **Presidio**: before every LLM/prompt/Buzz published message; regex fallback if down; `logger` suppresses sensitive fields |
+| **Compromised Nostr keys** | Private key leak (nsec) in logs/git | Identity spoofing, falsification/audit-log tampering | `.env.buzz` (chmod 600, gitignored), easy rotation via `bootstrap-buzz.sh`, `relay signature validation`; no private key in the Docker image; `git filter-repo` recommended on a real breach |
+| **Unstructured command generation** | Prompt injection from free Buzz text | Uncontrolled execution | **Strict JSON Schema** (`additionalProperties:false`) — free text is **never** executed (rejected at the deepest level) |
+| **Replay attack** | Same command sent repeatedly | Double settlement, double P&L deduction | `commandes_consommees` UNIQUE (content hash) — re-send locks `idempotent → 200 consumed` |
+| **Man-in-the-middle Buzz↔Bridge** | Modification during command/business-effect dispatch | Falsified actions | Buzz: NIP-98 Nostr header `<base64-signed>` (sender identity cryptographically validated); bridge verifies hours + Nostr Authorization header |
 
-## 2. Sécurité structurée appliquée
+## 2. Applied structured security
 
-### Authentification & Autorisation
-- **Identités Nostr** (npub/nsec Schnorr) 1 par opérateur humain + 1 par agent 1er niveau (CEO + 4 agents MVP en mode lite) : `buzz-admin add-member` par pubkey => relativisation (ACL role member / owner / bot).
-- **CEO = whitelisté** (`BRIDGE_CEOPUBKEYS`) — `POST /approvals/.../decide` et `POST /killswitch` **exigent explicitement** (CEO signé si `BRIDGE_REQUIRE_SIGNED_COMMANDS=true`, sinon npub whitelist pas prompt-injectable en messages publics).
-- **Agents autonomes** = npub dédiés (`BRIDGE_ALLOWED_UNSIGNED_ROLES`) : **non-signé = mode organisateur démo local** (PROD = désactivé), chaque action `authorize()`.
-- **Role enforcement** appliqué par `policy.evaluate()` autonome prioritaire! Le bridge refuse délibérément sans légaliser les décisions.
+### Authentication & Authorization
+- **Nostr identities** (npub/nsec Schnorr) 1 per human operator + 1 per level-1 agent (CEO + 4 MVP agents in lite mode): `buzz-admin add-member` per pubkey => relayization (ACL role member / owner / bot).
+- **CEO = whitelisted** (`BRIDGE_CEOPUBKEYS`) — `POST /approvals/.../decide` and `POST /killswitch` **explicitly require** (signed CEO if `BRIDGE_REQUIRE_SIGNED_COMMANDS=true`, otherwise whitelisted npub not prompt-injectable in public messages).
+- **Autonomous agents** = dedicated npubs (`BRIDGE_ALLOWED_UNSIGNED_ROLES`): **unsigned = demo local organization mode** (PROD = disabled), every action `authorize()`.
+- **Role enforcement** enforced by `policy.evaluate()` autonomous priority! The bridge refuses to deliberate without legalizing the decisions.
 
-### Confidentialité (PII/LLM)
-- **Toute entée texte vers LLM** passe par `Presidio /analyze + /anonymize` — regex fallback si Presidio down ; jamais de PII brute en input LLM.
-- Logs `pino` structured : no password/secret/PII ; clés = `***present***`
-- MCP tools whitelistés **par département** (correspondance rôles Hermes visibles : defendants). SearXNG / MailHog isolés net-external.
+### Confidentiality (PII/LLM)
+- **Every text entity to the LLM** goes through `Presidio /analyze + /anonymize` — regex fallback if Presidio down; never raw PII in LLM input.
+- Structured `pino` logs: no password/secret/PII; keys = `***present***`
+- MCP tools whitelisted **per department** (corresponding visible Hermes roles: defendants). SearXNG / MailHog isolated net-external.
 
-### Intégrité & Audit
-**Audit hash-chain append-only** :
-- chaque entrée `audit_log` contient : `seq` unique, `correlation_id`, `payload` (JSONB), `prev_hash` = SHA-256(prev_hash + payload) ; trigger `prev_hash` chaine
-- mode `verifyAuditChain()` expose altéré (fonction verify + DB)
-- `prev_hash=0` initial acceptation DB; root effectif = `first written entry on new gid` initialise cluster associé
+### Integrity & Audit
+**Hash-chain append-only audit**:
+- each `audit_log` entry contains: `seq` unique, `correlation_id`, `payload` (JSONB), `prev_hash` = SHA-256(prev_hash + payload); `prev_hash` chain trigger
+- `verifyAuditChain()` mode exposes altered (verify function + DB)
+- `prev_hash=0` initial DB acceptance; effective root = `first written entry on new gid` initialize associated cluster
 - `GET /audit/verify` exposes verification result + seq_max
 
-**Idempotence atomique** : `commandes_consommees` UNIQUE + `markConsumed()` (audit décliné lorsque consommé).
+**Atomic idempotency**: `commandes_consommees` UNIQUE + `markConsumed()` (audit declined when consumed).
 
-**Append-only P&L** : `pnl_ledger` UPDATE/DELETE trigger rejected.
+**Append-only P&L**: `pnl_ledger` UPDATE/DELETE trigger rejected.
 
-### Contrôle Humain Obligatoire
-- Kill-switch de secours : `POST /killswitch` (signé CEO) → `kill_switch.actif=true` → **toute exécution autonome refusée** excepté `killswitch.deactivate` (CEO signé).
-- Cycle complet `claim.settlement.approve` dépendant de kill-switch : dès qu'actif = `killswitch.actif: execution bloquée`
-- +souscription tarif exception (pricing) réservé au CEO
-- **Timing** : `started+<TTL>` = `approved`/`auto-expired` si dépassement (`APPROVAL_TTL_MINUTES` default 7 jours).
+### Mandatory Human Control
+- Emergency kill-switch: `POST /killswitch` (CEO signed) → `kill_switch.actif=true` → **all autonomous execution refused** except `killswitch.deactivate` (CEO signed).
+- Full `claim.settlement.approve` cycle suspended by kill-switch: as soon as active = `killswitch.actif`: execution blocked
+- +underwriting pricing exception reserved for the CEO
+- **Timing**: `started+<TTL>` = `approved`/`auto-expired` on overrun (`APPROVAL_TTL_MINUTES` default 7 days).
 
 ### Secret management
-- **Interdiction** : clés privées dans git, changelog, logs, images docker
-- **Pratique** : stockage dans `.env.buzz` (chmod 600) + fichiers `.env` et `BUZZ_RELAY_PRIVATE_KEY`, `BUZZ_RELAY_DIGEST`, `BUZZ_KEYS` lineage temporaires puis rotation si compromis
-- **Vault optionnel** : Infisical/Vault (Phase 3)
 
-### Segmentation réseau Docker
-| Network | Contenu | Accès |
+- **Prohibition**: private keys in git, changelog, logs, docker images
+- **Practice**: storage in `.env.buzz` (chmod 600) + files `.env` and `BUZZ_RELAY_PRIVATE_KEY`, `BUZZ_RELAY_DIGEST`, `BUZZ_KEYS` temporary lineage then rotation on compromise
+- **Optional Vault**: Infiscial/Vault (Phase 3)
+
+### Docker network segmentation
+| Network | Content | Access |
 |---|---|---|
-| net-core | Postgres, Redis | Bridge + prescription LLM |
-| net-dept | Bridge, Gitea, agents Hermes | API interne |
-| net-external | MailHog, SearXNG, Presidio | +exposition contrôlée au web des agents métier |
+| net-core | Postgres, Redis | Bridge + LLM prescriptive |
+| net-dept | Bridge, Gitea, Hermes agents | Internal API |
+| net-external | MailHog, SearXNG, Presidio | +controlled exposure of business agents to the web |
 
-## 3. Anonymisation (par défaut, données synthétiques)
+## 3. Anonymization (by default, synthetic data)
 
 - Faker `fr_FR` (custom seeds = `42`)
-- Toute donnée client's nom, email, tél, adresse, date_naissance, immatriculation… réelles nunements synthétiques
-- Buzz (cockpit) = **messages d'accompagnement** du pipeline, pas une source de données firm
-- Produit *explicitement* réservé à `"DEMO"` (data inventaire + clients susceptibles par invitation)
+- Every client datum is name, email, phone, address, date_naissance, immatriculation… real numbers none — synthetic
+- Buzz (cockpit) = **pipeline supporting messages**, not a firm data source
+- Product **explicitly** reserved for `"DEMO"` (data inventory + potentially invited clients)
 
-## 4. Procedure d'incident (si compromise détectée)
+## 4. Incident procedure (if compromise detected)
 
-- **Kill-switch CEO** : `POST /killswitch {active:true}` signature CEO (`POST /killswitch` bypass bridge direct si besoin)
-- **Audit** : `GET /audit/verify` = altération détectée ⇒ `first corrupted entry` accusé
-- **Rotation** : `scripts/init-agents-env.sh` + redémarre stack composition ; clés nouvelles rien de suite
-- **Contain** : journaliser audit logs `audit_log` + `commandes_consommees` via backup tar (schéma PG) puis rotation npub Buzz : 각 1 repo commits + add-member *only* manuel
-- **Révision** : analysis du cycle (logs pino + dashboard timeline correlation_id abaxial)
+- **CEO kill-switch**: `POST /killswitch {active:true}` CEO signature (`POST /killswitch` bridge direct bypass if needed)
+- **Audit**: `GET /audit/verify` = alteration detected ⇒ `first corrupted entry` accused
+- **Rotation**: `scripts/init-agents-env.sh` + composite stack restart; new keys nothing follows
+- **Contain**: journalize `audit_log` + `commandes_consommees` via tar backup (PG schema) then Buzz npub rotation: ≈ 1 repo commits + add-member **only** manual
+- **Review**: cycle analysis (pino logs + timeline dashboard `correlation_id` abaxial)
 
-## 5. Validation explicite (fournie pour la confiance client)
+## 5. Explicit validation (provided for client trust)
 
-- **13 exigences du brief §11 acceptées** (cf. `tasks.md`, résultats vérifiables)
-- **47+19 tests verts (bidirectional test existentiels)** : `tsc 0 error`, `vitest 47/47 bridge`, `19/19 runtime`
-- **E2E opponents DB réel** : Postgres v2 schema (PGVector + Memo + append-only triggers)
-- **Agent workflow E2E** : auto-settlement ≤ 5000; escalade pour >5000; decision CEO signée déclenche execution; idempotence (replay refusé); kill-switch actifs; audit trail unchanged.
-- **Chiffres** : résultat net **35 680 €** sur 117 semaines, 200 primes, 46 règlements, ratio Ụ 70%
+- **13 brief §11 requirements accepted** (cf. `tasks.md`, verifiable results)
+- **47+19 green tests (existing bidirectional tests)**: `tsc 0 error`, `vitest 47/47 bridge`, `19/19 runtime`
+- **E2E opponents DB real**: Postgres v2 schema (PGVector + Memo + append-only triggers)
+- **Agent workflow E2E**: auto-settlement ≤ 5000; escalate for >5000; signed CEO decision triggers execution; idempotency (replay refused); kill-switch active; audit trail unchanged.
+- **Numbers**: net result **€35,680** over 117 weeks, 200 premiums, 46 settlements, ratio ≈ 70%
 
-## 6. Ce que ce démonstrateur N'EST PAS
+## 6. What this demo is NOT
 
-- ❌ Certifié ACPR
-- ❌ Hébergé réglementé
-- ❌ Traite des données personnelles réelles
-- ❌ "Prêt pour la production"
-- ❌ Solutions aux promotes règlementaires ou complexity
+- ❌ ACPR certified
+- ❌ Regulated hosting
+- ❌ Processes real personal data
+- ❌ "Production ready"
+- ❌ Solutions for regulated promoters or complex
 
 ---
 
-## Contact sécurité
+## Security contact
 
-- **Security contact** : responsable-projet@assurance-toto.local
-- **Escalade Bug Bounty** : bug-tracker interne => switch to dashboard
-- **Updates** : ce document est revu par la conformité avant chaque changement structurant
+- **Security contact**: responsable-projet@assurance-toto.local
+- **Bug Bounty escalation**: internal bug-tracker => switch to dashboard
+- **Updates**: this document is reviewed by compliance before every structural change

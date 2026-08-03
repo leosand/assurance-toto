@@ -1,106 +1,104 @@
-# Infra PostgreSQL — Assurance Toto
+# PostgreSQL Infra — Assurance Toto
 
-PostgreSQL est **la source de vérité structurelle** du jumeau numérique. Le runtime
-TypeScript « Hermes » et le pont « buzz-hermes-bridge » (Fastify) lisent et écrivent
-cette base.
+PostgreSQL is **the structural source of truth** of the digital twin. The TypeScript runtime
+« Hermes » and the « buzz-hermes-bridge » (Fastify) read and write this database.
 
-## Fichiers
+## Files
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `init.sql` | Schéma v1 (clients, contrats, sinistres, agent_actions) — inchangé. |
-| `init_extensions.sql` | Extensions : `vector` (pgvector) et `pgcrypto` (`gen_random_uuid()`). À exécuter **avant** `schema_v2.sql`. |
-| `schema_v2.sql` | Schéma v2 (nouvelles tables, triggers append-only, vues métriques). Idempotent (`IF NOT EXISTS` / `OR REPLACE`). |
-| `seed_faker.py` | Générateur de données 100 % synthétiques (Faker `fr_FR`, déterministe). |
+| `init.sql` | v1 schema (clients, contrats, sinistres, agent_actions) — unchanged. |
+| `init_extensions.sql` | Extensions: `vector` (pgvector) and `pgcrypto` (`gen_random_uuid()`). To run **before** `schema_v2.sql`. |
+| `schema_v2.sql` | v2 schema (new tables, append-only triggers, metric views). Idempotent (`IF NOT EXISTS` / `OR REPLACE`). |
+| `seed_faker.py` | 100% synthetic data generator (Faker `fr_FR`, deterministic). |
 
-**Ordre d'exécution :** `init_extensions.sql` → `init.sql` → `schema_v2.sql`.
-Le montage dans `docker-entrypoint-initdb.d` (compose) est un ticket séparé.
+**Execution order:** `init_extensions.sql` → `init.sql` → `schema_v2.sql`.
+The mount in `docker-entrypoint-initdb.d` (compose) is a separate ticket.
 
-> ⚠️ **Prérequis pgvector** : la colonne `embedding vector(768)` et l'index HNSW
-> exigent l'extension `vector`, absente de l'image `postgres:16-alpine`. Utiliser
-> l'image `pgvector/pgvector:pg16` pour le service postgres.
+> ⚠️ **pgvector prerequisite**: the `embedding vector(768)` column and the HNSW index
+> require the `vector` extension, which is missing from the `postgres:16-alpine` image. Use
+> the `pgvector/pgvector:pg16` image for the postgres service.
 
-## Tables v2
+## v2 tables
 
 ### `approbations`
-File d'approbation humaine des actions agents (ex. `claim.settlement.approve`).
-Une seule approbation par `correlation_id` (`UNIQUE`). Cycle de vie :
+Human approval queue for agent actions (e.g. `claim.settlement.approve`).
+One approval per `correlation_id` (`UNIQUE`). Lifecycle:
 `en_attente` → `approuve` | `refuse` | `expire` (CHECK constraint).
-`decided_by` / `decided_at` / `reason` ne sont renseignés qu'à la décision.
+`decided_by` / `decided_at` / `reason` are only filled in at decision time.
 
 ### `commandes_consommees`
-Registre d'idempotence : `command_id` (PK) consommé exactement une fois.
-Le bridge fait `INSERT ... ON CONFLICT (command_id) DO NOTHING` et saute le
-traitement si la commande existe déjà.
+Idempotency registry: `command_id` (PK) consumed exactly once.
+The bridge does `INSERT ... ON CONFLICT (command_id) DO NOTHING` and skips processing
+if the command already exists.
 
 ### `pnl_ledger` — **APPEND-ONLY**
-Journal comptable P&L. Trigger `BEFORE UPDATE OR DELETE` qui rejette toute
-modification : toute correction se fait par **contre-écriture** (écriture inverse).
+P&L accounting journal. `BEFORE UPDATE OR DELETE` trigger rejects any
+modification: any correction is done via **contra-entry** (reverse entry).
 
-**Convention de signe : RECETTES positives, CHARGES négatives.**
+**Sign convention: positive RECEIPTS, negative CHARGES.**
 
-| categorie | Signe | Exemple |
+| category | Sign | Example |
 |---|---|---|
-| `prime` | `+` | Prime annuelle encaissée |
-| `reglement` | `−` | Règlement d'un sinistre |
-| `provision` | `−` | Dotation aux provisions (sinistre ouvert/en cours/contentieux) |
-| `frais` | `−` | Frais d'acquisition et de gestion |
-| `marketing` | `−` | Dépenses marketing |
+| `prime` | `+` | Annual premium collected |
+| `reglement` | `−` | Settlement of a claim |
+| `provision` | `−` | Provision allocation (open/ongoing/litigation claim) |
+| `frais` | `−` | Acquisition and management fees |
+| `marketing` | `−` | Marketing expenses |
 
-Résultat net = `SUM(montant)`. Les vues métriques reposent sur cette convention.
+Net result = `SUM(montant)`. The metric views rely on this convention.
 
 ### `memoire_agents`
-Mémoire long terme des agents : `contenu` (texte) + `embedding vector(768)`.
-768 dimensions = sortie d'`ollama nomic-embed-text`. L'agent calcule l'embedding
-côté applicatif (appel Ollama), l'insère avec le contenu, puis retrouve les
-souvenirs proches par similarité cosinus :
-`ORDER BY embedding <=> $1 LIMIT k` (l'index HNSW `vector_cosine_ops` accélère
-cette requête). `partage = true` rend le souvenir visible des autres départements ;
-sinon filtrer par `departement`.
+Long-term agent memory: `contenu` (text) + `embedding vector(768)`.
+768 dimensions = output of `ollama nomic-embed-text`. The agent computes the embedding
+on the application side (Ollama call), inserts it with the content, then retrieves
+nearby memories by cosine similarity:
+`ORDER BY embedding <=> $1 LIMIT k` (the `vector_cosine_ops` HNSW index accelerates
+ this query). `partage = true` makes the memory visible to other departments;
+ otherwise filter by `departement`.
 
-### `audit_log` — **APPEND-ONLY, hash-chaîné**
-Journal d'audit inviolable : chaque ligne porte `hash = sha256(prev_hash || payload)`,
-calculé **côté applicatif** (Hermes / bridge) au moment de l'INSERT. Trigger
-identique à `pnl_ledger` : UPDATE/DELETE rejetés. La vérification d'intégrité
-reconsiste à rejouer la chaîne sur `seq` croissant.
+### `audit_log` — **APPEND-ONLY, hash-chained**
+Tamper-evident audit journal: each row carries `hash = sha256(prev_hash || payload)`,
+computed **on the application side** (Hermes / bridge) at INSERT time. Trigger
+identical to `pnl_ledger`: UPDATE/DELETE rejected. Integrity verification
+consists of replaying the chain on ascending `seq`.
 
 ### `kill_switch`
-Arrêt d'urgence global des agents. Exactement **une ligne** (`CHECK (id = 1)`),
-pré-insérée avec `actif = false`. Les agents doivent lire `actif` avant toute
-action ; `active_par` / `active_le` tracent qui a appuyé sur le bouton.
+Global emergency stop for agents. Exactly **one row** (`CHECK (id = 1)`),
+pre-inserted with `actif = false`. Agents must read `actif` before any
+action; `active_par` / `active_le` track who pressed the button.
 
 ### `macro_indicateurs`
-Indicateurs macro-économiques injectés dans le contexte agents :
-`taux_bdf`, `inflation_insee`, `gpr` (CHECK constraint), avec `periode` et `source`.
+Macro-economic indicators injected into the agent context:
+`taux_bdf`, `inflation_insee`, `gpr` (CHECK constraint), with `periode` and `source`.
 
-## Vues métriques (dashboard)
+## Metric views (dashboard)
 
-- **`v_pnl_hebdo`** : résultat net par semaine ISO (`date_trunc('week')`) et
-  département, avec colonnes `primes`, `reglements`, `provisions`, `frais`,
+- **`v_pnl_hebdo`**: net result per ISO week (`date_trunc('week')`) and
+  department, with columns `primes`, `reglements`, `provisions`, `frais`,
   `marketing`, `resultat_net`.
-- **`v_ratio_sinistralite`** : ratio S/P par département =
-  `|SUM(reglement + provision)| / SUM(prime)` (les charges étant négatives).
-  `NULLIF` protège la division par zéro (ratio `NULL` si aucune prime).
+- **`v_ratio_sinistralite`**: claims ratio S/P per department =
+  `|SUM(reglement + provision)| / SUM(prime)` (charges being negative).
+  `NULLIF` protects against division by zero (`NULL` ratio if no premium).
 
 ## Seeding
 
 ```bash
-# Depuis la racine du projet (docker + réseau compose requis)
-./scripts/seed-data.sh          # portefeuille démo cohérent (--scale-maison)
-./scripts/seed-data.sh large    # 5000 clients / 3000 contrats / 800 sinistres
+# From the project root (docker + compose network required)
+./scripts/seed-data.sh            # coherent demo portfolio (--scale-maison)
+./scripts/seed-data.sh large    # 5000 clients / 3000 contracts / 800 claims
 ```
 
-`--scale-maison` génère ~120 clients, 200 contrats, 60 sinistres (statuts
-réalistes : ~70 % réglés), recale les montants pour un ratio de sinistralité
-d'exactement 70 % (bande 65-75 %), écrit le ledger (primes +, frais −10 %,
-règlements/provisions −), 3 lignes `macro_indicateurs` et garantit la ligne
-`kill_switch`.
+`--scale-maison` generates ~120 clients, 200 contracts, 60 claims (realistic statuses:
+~70 % settled), rescales amounts to a claims ratio of exactly 70 % (65-75 % band), writes the
+ledger (premiums +, fees − 10 %, settlements/provisions −), 3 `macro_indicateurs` rows and
+guarantees the `kill_switch` row.
 
-Le seeder est **déterministe** (`Faker.seed(42)` + `random.seed(42)`) : deux runs
-produisent les mêmes données. Connexion via `PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE`
-(défauts `localhost:5432`, `postgres`/`postgres`, base `assurance_toto`).
+The seeder is **deterministic** (`Faker.seed(42)` + `random.seed(42)`): two runs
+produce the same data. Connection via `PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE`
+(defaults `localhost:5432`, `postgres`/`postgres`, base `assurance_toto`).
 
-Usage direct hors docker :
+Direct usage outside docker:
 
 ```bash
 pip install psycopg2-binary faker

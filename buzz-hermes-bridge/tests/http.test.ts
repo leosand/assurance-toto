@@ -17,7 +17,7 @@ function cfg(): ReturnType<typeof loadConfig> {
 
 function makeSignedApproveCommandReq(): { command: Record<string, unknown>; author_pubkey: string; event: unknown } {
   const sk = generateSecretKey();
-  const attackerPub = getPublicKey(sk); // ≠ CEO_HEX : signature valide mais auteur non-CEO
+  const attackerPub = getPublicKey(sk); // ≠ CEO_HEX: valid signature but non-CEO author
   const command = {
     type: 'claim.settlement.approve',
     claim_id: 'CLM-1',
@@ -49,7 +49,7 @@ describe('HTTP /commands', () => {
     await app.close();
   });
 
-  it('payload non-objet (texte libre) → 400 schema.invalid (jamais exécuté)', async () => {
+  it('non-object payload (free text) → 400 schema.invalid (never executed)', async () => {
     const { repo } = makeMemoryRepository();
     const app = await buildServer(cfg(), { repo });
     const res = await app.inject({
@@ -69,7 +69,7 @@ describe('HTTP /commands', () => {
     await app.close();
   });
 
-  it('killswitch via POST /killswitch exige un npub CEO whitelisté sinon 403', async () => {
+  it('killswitch via POST /killswitch requires a whitelisted CEO npub, otherwise 403', async () => {
     const app = await buildServer(cfg(), { repo: makeMemoryRepository().repo });
     const bad = await app.inject({ method: 'POST', url: '/killswitch', payload: { active: true, decided_by: 'npub-not-ceo-xxx' } });
     expect(bad.statusCode).toBe(403);
@@ -78,7 +78,7 @@ describe('HTTP /commands', () => {
     await app.close();
   });
 
-  it('healthz + metrics exposés', async () => {
+  it('healthz + metrics exposed', async () => {
     const app = await buildServer(cfg(), { repo: makeMemoryRepository().repo });
     const hz = await app.inject({ method: 'GET', url: '/healthz' });
     expect(hz.statusCode).toBe(200);
@@ -88,7 +88,7 @@ describe('HTTP /commands', () => {
     await app.close();
   });
 
-  it("anti-forgery #4 : commande NON signée avec author_pubkey CEO → denied 'rbac:ceo_sans_signature'", async () => {
+  it("anti-forgery #4: UNSIGNED command with CEO author_pubkey → denied 'rbac:ceo_sans_signature'", async () => {
     const { repo } = makeMemoryRepository({
       sinistres: [{ id: 'CLM-1', statut: 'ouvert', montant_eur: 3200, compliance_bloque: false }],
     });
@@ -105,7 +105,7 @@ describe('HTTP /commands', () => {
           approved_by: CEO_HEX,
           requested_at: '2026-08-02T01:00:00.000Z',
         },
-        author_pubkey: CEO_HEX, // npub CEO mais aucun event signé joint
+        author_pubkey: CEO_HEX, // CEO npub but no signed event attached
         channel_uuid: CHANNEL,
       },
     });
@@ -117,17 +117,17 @@ describe('HTTP /commands', () => {
     await app.close();
   });
 
-  it('anti-forgery : npub CEO signé à la main (signature valide) → rôle ceo, règlement autorisé', async () => {
+  it('anti-forgery: manually signed CEO npub (valid signature) → ceo role, settlement allowed', async () => {
     const { repo } = makeMemoryRepository({
       sinistres: [{ id: 'CLM-1', statut: 'ouvert', montant_eur: 3200, compliance_bloque: false }],
     });
     const app = await buildServer(cfg(), { repo });
-    // Re-signature du même event prouve que l'amont l'a vérifié (chemin signed=true).
+    // Re-signing the same event proves upstream verified it (signed=true path).
     const body = makeSignedApproveCommandReq();
     const res = await app.inject({ method: 'POST', url: '/commands', payload: { ...body, channel_uuid: CHANNEL } });
     expect(res.statusCode).toBe(200);
     const json = res.json() as { result: { outcome: string; reason: string } };
-    expect(json.result.outcome).toBe('denied'); // (auteur aléatoire non CEO — toujours refusé)
+    expect(json.result.outcome).toBe('denied'); // (random non-CEO author — always denied)
     await app.close();
   });
 });

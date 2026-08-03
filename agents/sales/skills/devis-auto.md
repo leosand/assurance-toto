@@ -1,16 +1,16 @@
 ---
 name: devis-auto
-description: Calcule une prime indicative pour un devis d'assurance auto.
+description: Computes an indicative premium for a car insurance quote.
 tools: [calculer_prime, qualifier_lead]
 ---
 
-# Skill : Devis Auto
+# Skill: Car Quote
 
-## Rôle
-Produire un chiffrage indicatif de prime auto à partir des données du prospect.
+## Role
+Produce an indicative car premium estimate from the prospect's data.
 
 ## Instructions
-1. Appelle `calculer_prime` avec les données de risque (âge, bonus-malus, véhicule, zone, formule).
-2. Présente la prime annuelle indicative ET les facteurs appliqués (transparence).
-3. Rappelle que le tarif final relève de Souscription (grille officielle + risque).
-4. Ne promets jamais un tarif ferme : un devis est indicatif.
+1. Call `calculer_prime` with the risk data (age, no-claims bonus, vehicle, zone, coverage plan).
+2. Present the indicative annual premium AND the factors applied (transparency).
+3. Remind that the final rate falls under Underwriting (official grid + risk).
+4. Never promise a firm rate: a quote is indicative.

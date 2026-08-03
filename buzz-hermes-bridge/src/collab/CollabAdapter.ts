@@ -1,18 +1,18 @@
 /**
- * CollabAdapter — seam anti lock-in. Buzz est une implémentation (Nostr relay),
- * mais la pipeline ne voit QUE cette interface. NullCollabAdapter = in-memory
- * pour tests ET fallback documenté sans Buzz.
+ * CollabAdapter — anti-lock-in seam. Buzz is one implementation (Nostr relay),
+ * but the pipeline sees ONLY this interface. NullCollabAdapter = in-memory
+ * for tests AND as the documented fallback without Buzz.
  */
 export interface InboundCommand {
-  /** id d'événement Nostr ou id synthétique côté null adapter. */
+  /** Nostr event id or synthetic id from the null adapter. */
   eventId: string;
-  /** Chanel UUID cible (lowercase). */
+  /** Target channel UUID (lowercase). */
   channelUuid: string;
-  /** Auteur npub ou hex. */
+  /** Author npub or hex. */
   authorPubkey: string;
-  /** Texte brut du message (le body de commande s'y trouve sérialisé). */
+  /** Raw message text (the command body is serialized in it). */
   text: string;
-  /** Timestamp unix (seconds) de création côté relay. */
+  /** Unix creation timestamp (seconds) from the relay. */
   createdAt: number;
 }
 
@@ -22,16 +22,16 @@ export interface CollabHealth {
 }
 
 export interface CollabAdapter {
-  /** Poste un message texte dans un channel Buzz (kind 9, NIP-01). */
+  /** Posts a text message into a Buzz channel (kind 9, NIP-01). */
   postMessage(channelUuid: string, text: string, correlationId: string): Promise<{ eventId: string }>;
-  /** Récupère les messages entrants (kind 9) d'un channel depuis `since` (unix seconds). */
+  /** Fetches incoming messages (kind 9) from a channel since `since` (unix seconds). */
   fetchCommands(channelUuid: string, since?: number): Promise<InboundCommand[]>;
-  /** Idempotent: crée/assure l'existence du channel ou retourne son état. */
+  /** Idempotent: creates/ensures the channel exists, or returns its state. */
   ensureChannel(channelUuid: string, label?: string): Promise<{ ok: boolean }>;
   health(): Promise<CollabHealth>;
 }
 
-/** Fallback documenté : système dégrade en local si Buzz n'est pas configuré. */
+/** Documented fallback: the system degrades to local mode if Buzz is not configured. */
 export class NullCollabAdapter implements CollabAdapter {
   private readonly posted: { channelUuid: string; text: string; correlationId: string; eventId: string }[] = [];
 
@@ -50,10 +50,10 @@ export class NullCollabAdapter implements CollabAdapter {
   }
 
   async health(): Promise<CollabHealth> {
-    return { ok: true, detail: 'null-adapter (Buzz non configuré)' };
+    return { ok: true, detail: 'null-adapter (Buzz not configured)' };
   }
 
-  /** Test helper : capture des messages postés. */
+  /** Test helper: captures posted messages. */
   capture(): readonly { channelUuid: string; text: string; correlationId: string; eventId: string }[] {
     return this.posted;
   }

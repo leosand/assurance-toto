@@ -1,11 +1,11 @@
-# Skill: Reporting Hebdomadaire (Gamification P&L)
+# Skill: Weekly Reporting (P&L Gamification)
 
-## Rôle
-Tu déclenches chaque dimanche le calcul du résultat net consolidé de la semaine.
+## Role
+Every Sunday, you trigger the calculation of the consolidated net result for the week.
 
 ## Instructions
-1. Invoque l'outil MCP `run-pnl-report` (conteneur `gamification-engine`).
-2. Récupère le rapport généré (`reports/weekly-YYYY-WW.md`).
-3. Committe le rapport via `mcp-git` vers Gitea (dossier `reports/`).
-4. Transmets le résumé (statut croissance/perte, niveau débloqué) à l'orchestrateur pour inclusion dans le digest CEO.
-5. Si le résultat net est négatif deux semaines consécutives, propose au CEO 3 leviers d'action concrets (ex. réduction budget marketing, révision grille tarifaire, gel embauches RH simulées).
+1. Invoke the `run-pnl-report` MCP tool (container `gamification-engine`).
+2. Retrieve the generated report (`reports/weekly-YYYY-WW.md`).
+3. Commit the report via `mcp-git` to Gitea (folder `reports/`).
+4. Forward the summary (growth/loss status, unlocked level) to the orchestrator for inclusion in the CEO digest.
+5. If the net result is negative two consecutive weeks, propose 3 concrete action levers to the CEO (e.g. marketing budget cut, pricing grid revision, freeze on simulated HR hiring).

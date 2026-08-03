@@ -1,6 +1,6 @@
 /**
- * Politique de décision pure : pas d'accès DB ici, tout vient du PolicyContext.
- * Les règles métier restent lisibles côté métier (codes stables bilingues dans les reasons).
+ * Pure decision policy: no DB access here, everything comes from PolicyContext.
+ * Business rules stay readable on the business side (stable bilingual codes in reasons).
  */
 import type { Command } from '../commands/schemas.js';
 import type { PolicyContext, SinistreRow } from '../db/repository.js';
@@ -15,25 +15,25 @@ export interface PolicyDecision {
 const ALLOW: PolicyDecision = { allow: true, reason: 'allow' };
 const DENY = (reason: string): PolicyDecision => ({ allow: false, reason });
 
-/** Contexte enrichi : le pipeline y injecte le rôle résolu de l'auteur Nostr. */
+/** Enriched context: the pipeline injects the resolved role of the Nostr author. */
 export interface PolicyEvaluationInput {
   cmd: Command;
   ctx: PolicyContext;
-  /** Rôle déjà résolu (npubs CEO en config, map RBAC optionnelle). */
+  /** Already resolved role (config CEO npubs, optional RBAC map). */
   role: Role;
 }
 
-/** Ordre d'évaluation : du bloquant systémique au spécifique métier. */
+/** Evaluation order: from the systemic blocker to business-specific checks. */
 export function evaluate(input: PolicyEvaluationInput): PolicyDecision {
   const { cmd, ctx, role } = input;
   if (typeof cmd !== 'object' || cmd === null) return DENY('schema.invalid:payload_non_objet');
 
-  // Kill-switch : bloque tout sauf la désactivation explicite.
+  // Kill-switch: blocks everything except explicit deactivation.
   if (ctx.killSwitch !== null && ctx.killSwitch.actif && cmd.type !== 'agent.killswitch.deactivate') {
     return DENY('killswitch.actif:execution_autonome_bloquee');
   }
 
-  // Idempotence : même commande déjà consommée.
+  // Idempotence: same command already consumed.
   if (ctx.commandConsumed) return DENY('idempotence:commande_deja_consommee');
 
   switch (cmd.type) {
@@ -50,7 +50,7 @@ export function evaluate(input: PolicyEvaluationInput): PolicyDecision {
     case 'finance.report.request':
       return evaluateFinanceRequest(role);
     default: {
-      // Exhaustif côté TS ; fallback défensif pour un type non couvert.
+      // TS-exhaustive; defensive fallback for an uncovered type.
       const _never: never = cmd;
       return DENY(`schema.invalid:type_inconnu:${String(_never)}`);
     }
@@ -62,7 +62,7 @@ function evaluateClaimApprove(
   ctx: PolicyContext,
   role: Role,
 ): PolicyDecision {
-  // Rôles autorisés à soumettre un règlement : CEO et agent sinistres uniquement.
+  // Roles allowed to file a settlement: CEO and claims agent only.
   const isSinistresAgent = role === 'agent-sinistres';
   if (role !== 'ceo' && !isSinistresAgent) return DENY('rbac:reglement_non_autorise_pour_role');
   const s = ctx.sinistre;
@@ -70,13 +70,13 @@ function evaluateClaimApprove(
   if (s.statut !== 'ouvert' && s.statut !== 'en_traitement') {
     return DENY(`sinistre:statut_invalide:${s.statut}`);
   }
-  // Au-dessus du seuil global : décision réservée au CEO (un agent doit créer
-  // une approbation 'en_attente' plutôt que de s'auto-régler, cf. brief §6B).
+  // Above the global threshold: decision reserved to the CEO (an agent must create
+  // an 'en_attente' approval rather than self-settling, cf. brief §6B).
   if (isSinistresAgent && s.montant_eur > ctx.thresholdEur) {
     return DENY('rbac:au_dessus_seuil_reserve_CEO');
   }
-  // Plafond effectif : agent → moindre du plafond demandé et du seuil global ;
-  // CEO signé → plafond demandé (le CEO peut régler au-dessus du seuil).
+  // Effective cap: agent → lesser of the requested cap and the global threshold;
+  // signed CEO → requested cap (the CEO can settle above the threshold).
   const plafond = role === 'ceo' ? cmd.max_amount_eur : Math.min(cmd.max_amount_eur, ctx.thresholdEur);
   if (s.montant_eur > plafond) return DENY(`montant:sinistre_depasse_plafond:${s.montant_eur}>${plafond}`);
   if (s.compliance_bloque) return DENY('conformite:dossier_bloque');
@@ -119,9 +119,9 @@ function evaluateFinanceRequest(role: Role): PolicyDecision {
   return DENY('rbac:rapport_pnl_reserve_ceo_finance_conformite');
 }
 
-/** Actions exigeant le rôle CEO (doc + garde-fou réutilisable côté pipeline).
- *  NB : claim.settlement.approve n'y figure plus — en dessous du seuil global,
- *  un agent sinistres signé/allowlisté peut aussi se régler (brief §6B). */
+/** Actions requiring the CEO role (doc + guard reusable on the pipeline side).
+ *  NB: claim.settlement.approve is no longer among them — below the global
+ *  threshold, a signed/allowlisted claims agent can also settle (brief §6B). */
 export function requiresCeo(type: Command['type']): boolean {
   return (
     type === 'claim.settlement.reject' ||

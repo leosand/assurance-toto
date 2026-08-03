@@ -1,52 +1,53 @@
 # NETWORKING — Assurance Toto
 
-Matrice service → réseau → ports exposés, et frontières de confiance pour
-`docker-compose.lite.yml` (profil MVP) et `docker-compose.yml` (profil full).
+Matrix service → network → exposed ports, and trust boundaries for
+`docker-compose.lite.yml` (MVP profile) and `docker-compose.yml` (full profile).
 
-## Réseaux (bridges internes Docker)
+## Networks (internal Docker bridges)
 
-| Réseau | Rôle | Frontière de confiance |
+| Network | Role | Trust boundary |
 |---|---|---|
-| `net-core` | Données et files : bases PostgreSQL, Redis, MinIO, bus NATS | **Interne strict** — aucun port publié vers l'hôte ; seuls les services de confiance y sont rattachés |
-| `net-dept` | Agents : runtime Hermes, bridge, outils MCP (mcp-git), Buzz | **Interne élargi** — les agents et les UIs internes parlent aux backends de `net-core` via des clients internes jamais exposés |
-| `net-external` | Outils qui dialoguent vers l'extérieur : SearXNG (web), MailHog (SMTP de démo) | **Sortante seule** — les services externes n'ont pas d'accès aux données de `net-core` sauf jointure explicite |
-> Ollama est **hors conteneur** : natif sur l'hôte Windows, joint via
+| `net-core` | Data and files: PostgreSQL, Redis, MinIO, NATS bus | **Strict internal** — no port published to the host; only trusted services are attached |
+| `net-dept` | Agents: Hermes runtime, bridge, MCP tools (mcp-git), Buzz | **Broad internal** — agents and internal UIs talk to the `net-core` backends via never-exposed internal clients |
+| `net-external` | Tools that talk to the outside: SearXNG (web), MailHog (demo SMTP) | **Outbound only** — external services have no access to `net-core` data except via explicit attachment |
+
+> Ollama is **outside the container**: native on the Windows host, joined via
 > `host.docker.internal` (extra_hosts `host-gateway`) + `${OLLAMA_HOST}`.
 
-## Matrice des services
+## Service matrix
 
-| Service | Réseaux | Port conteneur | Port hôte (publié) | Commentaire |
+| Service | Networks | Container port | Host port (published) | Comment |
 |---|---|---|---|---|
-| `postgres` (métier) | net-core | 5432 | — | accessible uniquement aux services joinables (runtime agents, bridge) |
-| `postgres-buzz` | net-core | 5432 | — | base dédiée du relais Buzz, séparée du métier |
-| `redis` | net-core, net-dept | 6379 | — | `--requirepass` (mot de passe via `REDIS_PASSWORD`) ; partagé relais + DLQ bridge |
-| `gitea` | net-dept | 3000 | 3000 | UI dépôts locaux |
-| `mcp-git` | net-dept | 8090 | — | outil interne (SDK/agent), joint à Gitea interne |
-| `searxng` | net-external | 8080 | — | recherche web sortante pour les agents |
-| `mailhog` | net-external, net-dept | 8025 / 1025 | 8025 | UI web de démo + SMTP interne |
-| `buzz` (relais ghcr.io/block/buzz) | net-core, net-dept | 3000 (REST+WS+UI) / 8080 (santé) | 3002 / 8080 | web UI du relais + endpoints `/health`, `/_liveness`, `/_readiness` |
-| `minio` | net-core | 9000 (S3) / 9001 (console) | 9000 / 9001 | stockage médias Buzz (path-style), console hôte |
-| `minio-init` | net-core | — | — | one-shot `mc mb buzz-media`, terminé avant le démarrage du relais |
+| `postgres` (business) | net-core | 5432 | — | accessible only to joinable services (agent runtime, bridge) |
+| `postgres-buzz` | net-core | 5432 | — | dedicated database for the Buzz relay, separate from business |
+| `redis` | net-core, net-dept | 6379 | — | `--requirepass` (password via`REDIS_PASSWORD`); shared relay + bridge DLQ |
+| `gitea` | net-dept | 3000 | 3000 | local repository UI |
+| `mcp-git` | net-dept | 8090 | — | internal tool (SDK/agent), join internal Gitea |
+| `searxng` | net-external | 8080 | — | outbound web search for agents |
+| `mailhog` | net-external, net-dept | 8025 / 1025 | 8025 | demo web UI + internal SMTP |
+| `buzz` (relay ghcr.io/block/buzz) | net-core, net-dept | 3000 (REST+WS+UI) / 8080 (health) | 3002 / 8080 | relay web UI + `/health`, `/_liveness`, `/_readiness` endpoints |
+| `minio` | net-core | 9000 (S3) / 9001 (console) | 9000 / 9001 | Buzz media storage (path-style), host console |
+| `minio-init` | net-core | — | — | one-shot `mc mb buzz-media`, ends before the relay starts |
 | `buzz-hermes-bridge` | net-core, net-dept | 3100 | 3100 | `/healthz`, `/readyz`, `/commands`, `/approvals/decide`, `/killswitch`, audit |
-| `presidio-analyzer` | net-core, net-dept | 3000 | 3003 | anonymisation PII ; port hôte renommé (3000 déjà pris par Gitea) |
-| `nats` *(profil `nats`, full uniquement)* | net-core | 4222 / 8222 | — | bus d'événements optionnel |
-| Agents Hermes (orchestrateur, sales, souscription, sinistres-contentieux [+finance, support-client, marketing, conformite-it dans le profil full]) | net-dept (+ net-external pour sales / sinistres / marketing) | 4000 (healthz interne) | — | aucun port publié : appels via `BRIDGE_URL` et `PRESIDIO_URL` |
+| `presidio-analyzer` | net-core, net-dept | 3000 | 3003 | PII anonymization; host port renamed (3000 already taken by Gitea) |
+| `nats` *(profile `nats`, full only)* | net-core | 4222 / 8222 | — | optional event bus |
+| Hermes agents (orchestrateur, sales, souscription, sinistres-contentieux [+finance, support-client, marketing, conformite-it in the full profile]) | net-dept (+ net-external for sales / sinistres / marketing) | 4000 (internal healthz) | — | no published port: calls via `BRIDGE_URL` and `PRESIDIO_URL` |
 
-## Flux clés (trust boundaries)
+## Key flows (trust boundaries)
 
-- `agents` → `bridge` (net-dept) : commandes métier ; `bridge` → `buzz:3000`
-  (NIP-98 REST `/events`, `/query`, kind 9, tag `h`) ; CEO → `bridge`
-  (`/approvals/:correlationId/decide`, `/killswitch`) avec whitelist
-  `BRIDGE_CEOPUBKEYS` (+ signature Nostr si `BRIDGE_REQUIRE_SIGNED_COMMANDS=true`).
-- `bridge` / `runtime agents` → `postgres` (net-core) en lecture seule
-  (client interne du runtime).
-- `buzz` → `postgres-buzz`, `redis`, `minio` (net-core uniquement).
+- `agents` → `bridge` (net-dept): business commands; `bridge` → `buzz:3000`
+  (NIP-98 REST `/events`, `/query`, kind 9, tag `ha`); CEO → `bridge`
+  (`/approvals/:correlationId/decide`, `/killswitch`) with whitelist
+  `BRIDGE_CEOPUBKEYS` (+ Nostr signature if `BRIDGE_REQUIRE_SIGNED_COMMANDS=true`).
+- `bridge` / `runtime agents` → `postgres` (net-core) in read-only
+  (internal runtime client).
+- `buzz` → `postgres-buzz`, `redis`, `minio` (net-core only).
 - Agents `sales`/`sinistres-contentieux`/`marketing` → `mailhog`,
-  `searxng` (net-external) — seuls flux « sortants », jamais vers les données.
+  `searxng` (net-external) — only ± outbound ± flows, never to data.
 
-## Conflits de ports évités
+## Port conflicts avoided
 
-`3000` (hôte) est réservé à Gitea : le relais Buzz est publié sur **3002** et
-Presidio sur **3003**. Aucun service interne sensible (postgres, redis,
-minio, bridge à l'exception de 3100) n'expose de port base de données vers
-l'hôte.
+`3000` (host) is reserved for Gitea: the Buzz relay is published on **3002** and
+Presidio on **3003**. No sensitive internal service (postgres, redis,
+minio, bridge except 3100) exposes a data base port to
+the host.

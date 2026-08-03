@@ -1,10 +1,10 @@
--- init_extensions.sql — Extensions PostgreSQL requises par le schéma v2
--- Exécuté AVANT init.sql / schema_v2.sql (préfixe 00- dans docker-entrypoint-initdb.d).
--- NOTE : requiert l'image pgvector/pgvector:pg16 (l'image postgres:16-alpine
--- ne fournit pas l'extension vector). Le câblage compose est un ticket séparé.
+-- init_extensions.sql — PostgreSQL extensions required by the v2 schema
+-- Executed BEFORE init.sql / schema_v2.sql (00- prefix in docker-entrypoint-initdb.d).
+-- NOTE: requires the pgvector/pgvector:pg16 image (the postgres:16-alpine image
+-- does not ship the vector extension). The compose wiring is a separate ticket.
 
--- pgvector : embeddings 768 dims (ollama nomic-embed-text) pour memoire_agents
+-- pgvector: 768-dim embeddings (ollama nomic-embed-text) for memoire_agents
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- pgcrypto : gen_random_uuid() (idempotence, approbations, memoire_agents)
+-- pgcrypto: gen_random_uuid() (idempotence, approvals, memoire_agents)
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

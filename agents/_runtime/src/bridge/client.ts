@@ -1,17 +1,17 @@
 /**
- * Construction et envoi des commandes typées vers buzz-hermes-bridge.
+ * Builds and sends typed commands to buzz-hermes-bridge.
  *
- * Le bridge valide le corps avec HttpCommandBodySchema (zod) :
+ * The bridge validates the body with HttpCommandBodySchema (zod):
  *   POST {bridgeUrl}/commands
  *   { command: <Command>, author_pubkey: string, correlation_id?: uuid }
- * Puis valide le schéma strict de la commande (ajv, additionalProperties:false,
- * dates format date-time, approved_by pattern npub|hex64). Il applique ensuite
- * la politique (seuils, kill-switch, approbation CEO) et les effets métiers —
- * l'agent Hermes n'écrit JAMAIS en dur d'affaires.
+ * Then validates the strict command schema (ajv, additionalProperties:false,
+ * date-time format dates, approved_by pattern npub|hex64). It then applies
+ * the policy (thresholds, kill-switch, CEO approval) and the business effects —
+ * the Hermes agent NEVER writes business data directly.
  */
 import type { Logger } from 'pino';
 
-/** Commande strictement conforme au schéma ajv côté bridge. */
+/** Command strictly conforming to the bridge-side ajv schema. */
 export interface BridgeCommand {
   type: string;
   [key: string]: unknown;
@@ -19,12 +19,12 @@ export interface BridgeCommand {
 
 export interface BridgeClient {
   postCommand(command: BridgeCommand, correlationId: string): Promise<BridgePostResult>;
-  /** Escalade CEO : crée une approbation 'en_attente' visible sur GET /approvals. */
+  /** CEO escalation: creates a 'en_attente' approval visible on GET /approvals. */
   createApprobation(input: ApprobationInput): Promise<BridgePostResult>;
   ping(): Promise<boolean>;
 }
 
-/** Demande d'approbation CEO (règlement au-dessus du seuil, brief §6B). */
+/** CEO approval request (settlement above threshold, brief §6B). */
 export interface ApprobationInput {
   type: 'claim.settlement.approve';
   claim_id: string;
@@ -37,7 +37,7 @@ export interface ApprobationInput {
 export interface BridgePostResult {
   ok: boolean;
   httpStatus: number;
-  /** Corps de réponse du bridge (dérivé du PipelineResult), ou erreur normalisée. */
+  /** Bridge response body (derived from PipelineResult), or normalized error. */
   body: BridgeResponseBody;
 }
 
@@ -47,7 +47,7 @@ export type BridgeResponseBody =
 
 export interface BridgeClientDeps {
   bridgeUrl: string;
-  /** npub (ou hex) de l'agent — devient `author_pubkey`. */
+  /** The agent's npub (or hex) — becomes `author_pubkey`. */
   authorPubkey: string;
   logger: Logger;
   fetch?: typeof fetch;
@@ -71,8 +71,8 @@ function clampString(v: unknown, max: number): string {
 }
 
 /**
- * Valide et normalise `recommander_reglement` → claim.settlement.approve
- * conforme au schéma ajv du bridge. Retourne null si validation minimale échoue.
+ * Validates and normalizes `recommander_reglement` → claim.settlement.approve
+ * conforming to the bridge ajv schema. Returns null if minimal validation fails.
  */
 export function buildSettlementCommand(input: {
   claim_id: unknown;
@@ -116,7 +116,7 @@ export function createBridgeClient(deps: BridgeClientDeps): BridgeClient {
       return { ok: resp.ok, httpStatus: resp.status, body };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      deps.logger.warn({ action: 'bridge.unreachable', path }, 'bridge injoignable');
+      deps.logger.warn({ action: 'bridge.unreachable', path }, 'bridge unreachable');
       return {
         ok: false,
         httpStatus: 0,

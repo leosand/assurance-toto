@@ -1,6 +1,6 @@
 /**
- * Dead-letter queue: commandes non réessayables ou épuisant les tentatives.
- * Transport = Redis stream `dlq:commands` (ou in-memory en tests sans Redis).
+ * Dead-letter queue: non-retryable commands or commands exhausting attempts.
+ * Transport = Redis stream `dlq:commands` (or in-memory in tests without Redis).
  */
 import type { Redis } from 'ioredis';
 
@@ -19,7 +19,7 @@ export interface DlqSink {
   close(): Promise<void>;
 }
 
-// Redis Streams (XADD) — behavioral dépend de ioredis.
+// Redis Streams (XADD) — behavior depends on ioredis.
 export class RedisDlq implements DlqSink {
   private readonly redis: Redis;
 
@@ -66,7 +66,7 @@ export class RedisDlq implements DlqSink {
   }
 }
 
-// In-memory (tests / démo hors Redis).
+// In-memory (tests / demo without Redis).
 export class MemoryDlq implements DlqSink {
   private readonly entries: DlqEntry[] = [];
 

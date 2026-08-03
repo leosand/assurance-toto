@@ -1,31 +1,31 @@
-# Interface — Agent SINISTRES & CONTENTIEUX
+# Interface — CLAIMS & LITIGATION Agent
 
-Instance du runtime Hermes, rôle `sinistres-contentieux`. Déclaration, estimation, négociation, **recommandation de règlement**.
+Instance of the Hermes runtime, role `sinistres-contentieux`. Declaration, estimation, negotiation, **settlement recommendation**.
 
-## Entrées
-- `POST /task` `{ "title", "description", "correlation_id"? }` — ex. « traiter la déclaration du sinistre 128 ».
+## Inputs
+- `POST /task` `{ "title", "description", "correlation_id"? }` — e.g. "process the declaration of claim 128".
 
-## Outils internes autorisés
+## Authorized internal tools
 `lire_sinistre`, `lire_client`, `lire_contrat`, `recommander_reglement`, `consulter_memoire`.
 
 ## MCP (via gateway)
-`mcp-postgres` (lecture seule), `mailhog` (courriers simulés avec les tiers), `presidio` (anonymisation des données des tiers).
+`mcp-postgres` (read-only), `mailhog` (simulated correspondence with third parties), `presidio` (anonymization of third-party data).
 
-## Sorties
-`TaskResult` structuré.
-- `lire_sinistre/client/contrat` → données read-only.
-- `recommander_reglement` → produit une **commande candidate** `claim.settlement.approve`
-  `{ type, claim_id, max_amount_eur, reason, approved_by, requested_at }` qui est POSTée au bridge
+## Outputs
+Structured `TaskResult`.
+- `lire_sinistre/client/contrat` → read-only data.
+- `recommander_reglement` → produces a **candidate command** `claim.settlement.approve`
+  `{ type, claim_id, max_amount_eur, reason, approved_by, requested_at }` which is POSTed to the bridge
   (`POST {BRIDGE_URL}/commands` `{ command, author_pubkey, correlation_id }`).
-  Le bridge valide (schéma ajv), applique la politique (kill-switch, seuil `CLAIM_SETTLEMENT_THRESHOLD_EUR`),
-  crée une approbation CEO si nécessaire, INSÈRE dans `pnl_ledger` et met à jour `sinistres` —
-  **l'agent n'écrit jamais ces tables directement**.
+  The bridge validates (ajv schema), applies the policy (kill-switch, `CLAIM_SETTLEMENT_THRESHOLD_EUR` threshold),
+  creates a CEO approval if necessary, INSERTS into `pnl_ledger` and updates `sinistres` —
+  **the agent never writes these tables directly**.
 
-## Escalade
-Montant > `HERMES_ESCALATION_THRESHOLD_EUR` (défaut 5 000 €) → `escalation_ceo: true` dans la recommandation ; pas de finalisation sans approbation CEO via le bridge.
+## Escalation
+Amount > `HERMES_ESCALATION_THRESHOLD_EUR` (default €5,000) → `escalation_ceo: true` in the recommendation; no finalization without CEO approval via the bridge.
 
-## Contrat de corrélation
-`correlation_id` frais ou fourni ; propagé au POST bridge (idempotence côté bridge) et à `memoire_agents`.
+## Correlation contract
+Fresh or provided `correlation_id`; propagated to the bridge POST (bridge-side idempotency) and to `memoire_agents`.
 
-## Confidentialité
-Données personnelles des tiers systématiquement anonymisées avant tout traitement ou stockage.
+## Confidentiality
+Third-party personal data is systematically anonymized before any processing or storage.

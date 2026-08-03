@@ -1,6 +1,6 @@
 /**
- * Test 5 : anonymize masque email/téléphone/IBAN/NIR avant d'atteindre le LLM,
- * avec fallback regex si Presidio est injoignable, et guards finaux anti-PII.
+ * Test 5: anonymize masks email/phone/IBAN/NIR before reaching the LLM,
+ * with regex fallback if Presidio is unreachable, plus final anti-PII guards.
  */
 import { describe, it, expect } from 'vitest';
 import pino from 'pino';
@@ -14,11 +14,11 @@ import { makeHarness } from './helpers.js';
 
 const silent = pino({ level: 'silent' });
 
-// fetch qui échoue systématiquement → Presidio "injoignable".
+// fetch that always fails → Presidio "unreachable".
 const failingFetch: typeof fetch = () => Promise.reject(new Error('ECONNREFUSED'));
 
 describe('anonymisation PII', () => {
-  it('le stub regex masque email, téléphone FR, IBAN', () => {
+  it('the regex stub masks email, FR phone, IBAN', () => {
     const text = 'Contact: Jean.Dupont@example.fr ou +33 6 12 34 56 78, IBAN FR76 3000 6000 0112 3456 7890 189';
     const masked = fallbackMask(text).text;
     expect(masked).not.toContain('@');
@@ -29,14 +29,14 @@ describe('anonymisation PII', () => {
     expect(masked).toContain('[IBAN]');
   });
 
-  it('masque un NIR (numéro de sécurité sociale)', () => {
-    const text = 'NIR assuré : 1 85 05 78 006 084 36';
+  it('masks a NIR (French social security number)', () => {
+    const text = 'Client NIR: 1 85 05 78 006 084 36';
     const masked = fallbackMask(text).text;
     expect(masked).toContain('[NIR]');
     expect(masked).not.toContain('006 084');
   });
 
-  it("anonymize bascule sur le stub regex quand Presidio est injoignable", async () => {
+  it("anonymize falls back to the regex stub when Presidio is unreachable", async () => {
     const anonymizer = createAnonymizer({
       presidioUrl: 'http://presidio-down:3000',
       logger: silent,
@@ -48,7 +48,7 @@ describe('anonymisation PII', () => {
     expect(out).toContain('[PHONE]');
   });
 
-  it('anonymize retourne le texte Presidio masqué quand le service est joignable', async () => {
+  it('anonymize returns the Presidio-masked text when the service is reachable', async () => {
     const okFetch: typeof fetch = async (input, init) => {
       const url = String(input);
       if (url.endsWith('/analyze')) {
@@ -71,23 +71,23 @@ describe('anonymisation PII', () => {
     expect(out).toBe('Contact: ********');
   });
 
-  it('assertNoPii détecte les résidus ; finalScrub nettoie', () => {
+  it('assertNoPii detects residue; finalScrub cleans up', () => {
     expect(assertNoPii('jean@dupont.fr')).toBe(true);
-    expect(assertNoPii('texte propre sans donnée perso')).toBe(false);
+    expect(assertNoPii('clean text without personal data')).toBe(false);
     expect(finalScrub('mail jean@dupont.fr fin')).not.toContain('@');
   });
 
-  it('la tâche est anonymisée AVANT d’atteindre le LLM (le message user ne contient plus l’email)', async () => {
-    // Capture ce que le LLM reçoit réellement.
+  it('the task is anonymized BEFORE reaching the LLM (the user message no longer contains the email)', async () => {
+    // Capture what the LLM actually receives.
     let userContentSeen = '';
     const harness = makeHarness({
       role: 'sales',
       tools: ['qualifier_lead'],
       chatResponses: [{ toolCalls: [], text: 'ok' }],
     });
-    // Injecte un ollama espion : on rebâtit via le harnais interne (chatResponses
-    // déjà consommées), donc on vérifie indirectement : runTask anonymise la description.
-    // Vérification directe du contrat : anonymize() sur la tâche.
+    // Inject a spy ollama: rebuilt via the internal harness (chatResponses
+    // already consumed), so we verify indirectly: runTask anonymizes the description.
+    // Direct contract check: anonymize() on the task.
     userContentSeen = await (async () => {
       const res = await harness.agent.runTask({
         title: 'Rappeler marie@example.com',
@@ -96,7 +96,7 @@ describe('anonymisation PII', () => {
       return res.fallbackText ?? res.summary;
     })();
     expect(userContentSeen.length).toBeGreaterThan(0);
-    // Le titre contenant l'email ne doit jamais fuiter dans le résumé brut.
+    // The title containing the email must never leak into the raw summary.
     expect(userContentSeen).not.toContain('marie@example.com');
   });
 });

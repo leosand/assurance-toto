@@ -1,7 +1,7 @@
 /**
- * Pipeline : la colonne vertébrale de corrélation.
- * Chaque transition est observable (log JSON / audit / métriques) et rejette
- * immédiatement tout texte libre, signature invalide ou violation de politique.
+ * Pipeline: the correlation backbone.
+ * Every transition is observable (JSON log / audit / metrics) and rejects
+ * immediately any free text, invalid signature or policy violation.
  */
 import { createHash, randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
@@ -19,7 +19,7 @@ import type { BridgeConfig } from './config.js';
 export const PIPELINE_SOURCE = 'buzz-hermes-bridge';
 export const MAX_ATTEMPTS_TRANSIENT = 3;
 
-/** Erreurs discriminées par leur origine pour router retry vs DLQ. */
+/** Errors discriminated by their origin to route retry vs DLQ. */
 export class PipelineError extends Error {
   constructor(
     readonly code:
@@ -48,22 +48,22 @@ export interface PipelineDeps {
   logger: Logger;
   cfg: BridgeConfig;
   ceoPubkeysHex: string[];
-  /** npubs d'agents autorisés SANS signature (normalisés hex, via cfg.allowedUnsignedRoles). */
+  /** npubs of agents authorized WITHOUT signature (hex-normalized, via cfg.allowedUnsignedRoles). */
   allowedUnsignedRolesHex: string[];
 }
 
 export interface InboundCommandEnvelope {
-  /** Event Nostr signé (kind 9) ou envelope synthétique provenant du POST direct. */
+  /** Signed Nostr event (kind 9) or synthetic envelope from direct POST. */
   eventId: string;
-  /** npub/hex de l'auteur (pour RBAC). */
+  /** npub/hex of the author (for RBAC). */
   authorPubkey: string;
-  /** Content string (JSON sérialisé ou texte brut). */
+  /** Content string (serialized JSON or raw text). */
   content: string;
-  /** Correlation id fourni par l'appelant (sinon nouveau UUID). */
+  /** Correlation id provided by the caller (otherwise a new UUID). */
   correlationId?: string;
-  /** Canal Buzz cible pour le message retour. */
+  /** Target Buzz channel for the return message. */
   channelUuid: string;
-  /** true SEULEMENT si la signature Nostr de l'event a été vérifiée en amont. */
+  /** true ONLY if the event Nostr signature was verified upstream. */
   signed?: boolean;
 }
 
@@ -82,7 +82,7 @@ export async function processInboundCommand(deps: PipelineDeps, env: InboundComm
   const log = deps.logger.child({ correlation_id: correlationId, command_id: env.eventId, author: env.authorPubkey });
   const startedAt = process.hrtime.bigint();
 
-  log.info({ step: 'pipeline.enter', actor: 'bridge' }, 'Commande reçue');
+  log.info({ step: 'pipeline.enter', actor: 'bridge' }, 'Command received');
 
   try {
     const outcome = await runPipeline(deps, env, correlationId, log);
@@ -94,10 +94,10 @@ export async function processInboundCommand(deps: PipelineDeps, env: InboundComm
     deps.metrics.commandsProcessed.observe({ result: 'error' }, elapsed);
     const pe = toPipelineError(err, correlationId);
     if (pe.retryable) {
-      log.warn({ step: 'pipeline.retry', code: pe.code, err: pe.message }, 'Erreur transient, on laisse l\'upstream retry');
+      log.warn({ step: 'pipeline.retry', code: pe.code, err: pe.message }, 'Transient error, leaving upstream to retry');
       throw pe;
     }
-    // Chemin mort : enfile et retourne DLQ outcome.
+    // Dead end path: enqueue and return DLQ outcome.
     await deps.dlq.enqueue({
       commandId: env.eventId,
       correlationId,
@@ -105,7 +105,7 @@ export async function processInboundCommand(deps: PipelineDeps, env: InboundComm
       payload: rawOf(env),
       attempts: 1,
     });
-    log.error({ step: 'pipeline.dlq', code: pe.code, err: pe.message }, 'Commande DLQ');
+    log.error({ step: 'pipeline.dlq', code: pe.code, err: pe.message }, 'Command DLQ');
     await safeAudit(deps, correlationId, 'command.dlq', { code: pe.code, reason: pe.message });
     return { correlationId, outcome: 'dlq', reason: pe.message, commandId: commandIdOfEnv(env), returnsToChannel: env.channelUuid };
   }
@@ -117,7 +117,7 @@ async function runPipeline(
   correlationId: string,
   log: Logger,
 ): Promise<PipelineResult> {
-  // 1) Schéma strict
+  // 1) Strict schema
   const raw = parseContent(env.content);
   const parsed = validateCommand(raw);
   if (!parsed.ok) {
@@ -127,42 +127,42 @@ async function runPipeline(
   }
   const command: Command = parsed.command;
   const commandId = commandIdOfEnv(env);
-  log.info({ step: 'pipeline.schema_ok', command_type: command.type }, 'Commande validée par schéma');
+  log.info({ step: 'pipeline.schema_ok', command_type: command.type }, 'Command validated by schema');
 
-  // 2) Idempotence PRE-policy : une commande déjà consommée doit retourner l'outcome
-  //    dédié 'consumed' (200 idempotent côté appelant), pas un deny de politique.
-  //    On lit commandes_consommees et on court-circuite sans effet.
+  // 2) Idempotence PRE-policy: an already-consumed command returns the
+  //    dedicated 'consumed' outcome (idempotent 200 on the caller side), not a policy deny.
+  //    We read commandes_consommees and short-circuit with no effect.
   if (await deps.repo.isCommandConsumed(commandId)) {
     await safeAudit(deps, correlationId, 'command.idempotent_refuse_precheck', { command_id: commandId });
     return { correlationId, outcome: 'consumed', reason: 'idempotence:commande_deja_consommee', commandId, returnsToChannel: env.channelUuid };
   }
 
-  // 3) Rôle de l'auteur. La vérification de signature Nostr elle-même se fait en amont :
-  //    - sur un événement relay (BuzzAdapter.parseInboundEvent → verifyEvent)
-  //    - ou sur la route /commands via verifySignedEvent quand l'appelant fournit l'event signé.
-  //    Mal signé ou auteur hors liste CEO ⇒ deny.
+  // 3) Author role. The Nostr signature verification itself happens upstream:
+  //    - on a relay event (BuzzAdapter.parseInboundEvent → verifyEvent)
+  //    - or on the /commands route via verifySignedEventForCommand when the caller provides the signed event.
+  //    Badly signed or author outside the CEO list ⇒ deny.
   const signed = env.signed === true;
   const role: Role = resolveRole(env.authorPubkey, deps.ceoPubkeysHex, deps.allowedUnsignedRolesHex, signed);
 
-  // 3b) Anti-forgery dur : un npub CEO SANS signature vérifiée est refusé net,
-  //     quelle que soit l'allowlist (sinon n'importe qui forgerait le CEO).
+  // 3b) Hard anti-forgery: a CEO npub WITHOUT a verified signature is refused outright,
+  //     whatever the allowlist (otherwise anyone could forge the CEO).
   if (!signed && deps.ceoPubkeysHex.includes(safeNormalizeHex(env.authorPubkey))) {
     await safeAudit(deps, correlationId, 'command.auth_denied', { reason: 'rbac:ceo_sans_signature' });
     return deny(correlationId, env, 'rbac:ceo_sans_signature');
   }
-  // Ouverture autonomie §6B : le rôle 'agent-sinistres' ne vient JAMAIS d'un
-  // author_pubkey auto-déclaré — uniquement de l'allowlist agents ou de la
-  // signature (vérifiée en amont côté BuzzAdapter/HTTP).
+  // Autonomy opening §6B: the 'agent-sinistres' role NEVER comes from a
+  // self-declared author_pubkey — only from the agent allowlist or the
+  // signature (verified upstream on the BuzzAdapter/HTTP side).
 
-  // 3) Kill-switch : toute exécution autonome est bloquée sauf killswitch.deactivate.
+  // 3) Kill-switch: any autonomous execution is blocked except killswitch.deactivate.
   const killSwitch = await deps.repo.getKillSwitch();
   const inLock = killSwitch !== null && killSwitch.actif;
   if (inLock && command.type !== 'agent.killswitch.deactivate') {
     await safeAudit(deps, correlationId, 'command.killswitch_blocked', { actif_par: killSwitch?.active_par ?? null });
-    throw new PipelineError('killswitch.blocked', 'kill-switch actif : exécution refusée', correlationId);
+    throw new PipelineError('killswitch.blocked', 'kill-switch active: execution refused', correlationId);
   }
 
-  // 4) Évaluation de politique
+  // 4) Policy evaluation
   const ctx: PolicyContext = {
     killSwitch,
     sinistre: command.type.startsWith('claim.') ? await deps.repo.findSinistre(claimIdOf(command)) : null,
@@ -175,16 +175,16 @@ async function runPipeline(
     await safeAudit(deps, correlationId, 'command.policy_denied', { reason: policy.reason, role });
     return deny(correlationId, env, policy.reason);
   }
-  log.info({ step: 'pipeline.policy_ok', role }, 'Politique autorisée');
+  log.info({ step: 'pipeline.policy_ok', role }, 'Policy allowed');
 
-  // 5) Idempotence : insertion atomique ; 0 ligne → déjà consommée.
+  // 5) Idempotence: atomic insert; 0 row → already consumed.
   const isConsumed = await markConsumed(deps, commandId, correlationId, command);
   if (!isConsumed) {
     await safeAudit(deps, correlationId, 'command.idempotent_refuse', { command_id: commandId });
     return { correlationId, outcome: 'consumed', reason: 'idempotence:commande_deja_consommee', commandId, returnsToChannel: env.channelUuid };
   }
 
-  // 6) Audit immuable avant effet
+  // 6) Immutable audit before effect
   const { hash } = await appendAudit(deps.repo, {
     correlationId,
     source: PIPELINE_SOURCE,
@@ -192,7 +192,7 @@ async function runPipeline(
     payload: { command_id: commandId, role, author: env.authorPubkey, command },
   });
 
-  // 7) Effet métier en transaction Postgres
+  // 7) Business effect inside a Postgres transaction
   const effect = await deps.repo.inTransaction(async (tx: Tx) => {
     switch (command.type) {
       case 'claim.settlement.approve':
@@ -211,24 +211,24 @@ async function runPipeline(
         await tx.query(`INSERT INTO approbations (correlation_id, type, statut, montant_eur, decided_by, reason, decided_at) VALUES ($1,$2,'approuve',$3,$4,$5,NOW()) ON CONFLICT (correlation_id) DO NOTHING`, [correlationId, command.type, command.new_prime_eur, command.approved_by, command.reason]);
         return { pricing: 'exception_appliquee', prime: command.new_prime_eur };
       case 'finance.report.request':
-        // Lecture seule : pas d'écriture métier ici.
+        // Read-only: no business write here.
         return { report: 'demande_recue', periode: command.periode };
       default: {
         const _never: never = command;
-        throw new Error(`type non géré: ${String(_never)}`);
+        throw new Error(`unhandled type: ${String(_never)}`);
       }
     }
   });
 
-  // 7b) Marquer l'approbation résolue si applicable
+  // 7b) Mark the approval as resolved when applicable
   if (command.type === 'claim.settlement.approve' || command.type === 'claim.settlement.reject') {
     await deps.repo.decideApprobation(correlationId, command.approved_by, command.reason, command.type === 'claim.settlement.approve').catch(() => undefined);
   }
 
-  // 8) Message retour vers Buzz (ou NullCollab si fallback)
+  // 8) Return message to Buzz (or NullCollab on fallback)
   const replyText = renderOutboundText(command, correlationId, effect);
   const posted = await deps.adapter.postMessage(env.channelUuid, replyText, correlationId).catch(() => ({ eventId: `local-${Date.now()}` }));
-  log.info({ step: 'pipeline.executed', event_id: posted.eventId }, 'Commande exécutée');
+  log.info({ step: 'pipeline.executed', event_id: posted.eventId }, 'Command executed');
   await safeAudit(deps, correlationId, 'command.executed', { effect, event_id: posted.eventId });
 
   return {
@@ -248,7 +248,7 @@ async function runPipeline(
 
 // ---------- helpers internes ----------
 function parseContent(content: string): unknown {
-  // Un texte libre n'est pas une commande : il est refusé par le schéma.
+  // Free text is not a command: it is rejected by the schema.
   try {
     return JSON.parse(content) as unknown;
   } catch {
@@ -257,7 +257,7 @@ function parseContent(content: string): unknown {
 }
 
 function commandIdOfEnv(env: InboundCommandEnvelope): string {
-  // Le hash du content (et non l'event.id) stabilise l'idempotence côté multi-origine.
+  // The content hash (not the event.id) stabilises idempotence across multiple origins.
   return createHash('sha256').update(env.content, 'utf8').digest('hex');
 }
 
@@ -268,11 +268,11 @@ function claimIdOf(command: Command): string {
 
 function resolveRole(author: string, ceoList: string[], unsignedAllowlist: string[], signed: boolean): Role {
   const normalized = safeNormalizeHex(author);
-  // Un auteur CEO n'est ceo QUE si l'event signé a été vérifié (le deny dur
-  // « ceo_sans_signature » est appliqué en amont dans runPipeline).
+  // A CEO author is ceo ONLY if the signed event was verified (the hard
+  // "ceo_sans_signature" deny is applied upstream in runPipeline).
   if (signed && ceoList.includes(normalized)) return 'ceo';
-  // Phase 1 (signature Nostr absente) : un agent Hermes de l'allowlist reçoit
-  // le rôle agent-sinistres — jamais le rôle ceo (aucun npub ceo n'y a droit).
+  // Phase 1 (Nostr signature absent): a Hermes agent from the allowlist gets
+  // the agent-sinistres role — never the ceo role (no ceo npub is eligible).
   if (!signed && unsignedAllowlist.includes(normalized)) return 'agent-sinistres';
   return 'inconnu';
 }
@@ -299,7 +299,7 @@ async function markConsumed(deps: PipelineDeps, commandId: string, correlationId
     return Number(r.rows[0]?.n ?? '0');
   });
   if (rows === 0) return false;
-  // Si l'objet existe déjà comme approbation, on la relie au cycle de vie.
+  // If the object already exists as an approval, link it to the lifecycle.
   if (command.type.startsWith('claim.')) {
     await deps.repo.inTransaction(async (tx: Tx) => {
       await tx.query(
@@ -317,7 +317,7 @@ async function safeAudit(deps: PipelineDeps, correlationId: string, action: stri
   try {
     await appendAudit(deps.repo, { correlationId, source: PIPELINE_SOURCE, action, payload });
   } catch (err) {
-    deps.logger.warn({ err: err instanceof Error ? err.message : String(err), action }, 'audit append échoué');
+    deps.logger.warn({ err: err instanceof Error ? err.message : String(err), action }, 'audit append failed');
   }
 }
 
@@ -333,11 +333,11 @@ function renderOutboundText(command: Command, correlationId: string, effect: unk
     case 'policy.pricing.exception.approve':
       return `[ok] ${head} pricing exception contrat=${command.contrat_id} prime=${command.new_prime_eur}`;
     case 'agent.killswitch.activate':
-      return `[ok] ${head} killswitch=actif par=${command.approved_by}`;
+      return `[ok] ${head} killswitch=active by=${command.approved_by}`;
     case 'agent.killswitch.deactivate':
-      return `[ok] ${head} killswitch=inactif par=${command.approved_by}`;
+      return `[ok] ${head} killswitch=inactive by=${command.approved_by}`;
     case 'finance.report.request':
-      return `[ok] ${head} rapport demandé periode=${command.periode}`;
+      return `[ok] ${head} report requested period=${command.periode}`;
     default: {
       const _never: never = command;
       return `[ok] ${head} ${String(_never)}`;

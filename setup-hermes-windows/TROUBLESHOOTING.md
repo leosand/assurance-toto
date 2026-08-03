@@ -1,28 +1,28 @@
-# 🔧 Troubleshooting — Hermes + Assurance Toto sur Windows 11
+# 🔧 Troubleshooting — Hermes + Assurance Toto on Windows 11
 
 ## "wsl : le terme n'est pas reconnu" (PowerShell)
-Ta version de Windows 11 n'a pas WSL activé. Vérifier `Windows Update` puis relancer `wsl --install`.
-Redémarrer impérativement après installation.
+Your Windows 11 version doesn't have WSL enabled. Check `Windows Update` then run `wsl --install` again.
+A restart is mandatory after installation.
 
-## Docker Desktop ne démarre pas / "WSL2 kernel outdated"
+## Docker Desktop won't start / "WSL2 kernel outdated"
 ```powershell
 wsl --update
 ```
-Puis redémarrer Docker Desktop.
+Then restart Docker Desktop.
 
-## "Cannot connect to the Docker daemon" depuis WSL2
-Vérifier dans Docker Desktop → Settings → Resources → WSL Integration que ta distribution Ubuntu est bien cochée. Redémarrer WSL2 :
+## "Cannot connect to the Docker daemon" from WSL2
+Check in Docker Desktop → Settings → Resources → WSL Integration that your Ubuntu distribution is ticked. Restart WSL2:
 ```powershell
 wsl --shutdown
 ```
-Puis rouvrir Ubuntu.
+Then reopen Ubuntu.
 
-## Hermes rejette les tâches / erreur "context too small"
-Le contexte Ollama est trop bas. Vérifier :
+## Hermes rejects tasks / "context too small" error
+The Ollama context is too low. Check with:
 ```powershell
 ollama show qwen2.5:7b --modelfile
 ```
-Chercher `PARAMETER num_ctx`. S'il est inférieur à 32768, forcer via variable d'environnement `OLLAMA_CONTEXT_LENGTH=32768` avant de relancer `ollama serve`, ou créer un Modelfile custom :
+Look for `PARAMETER num_ctx`. If it's below 32768, force it via the `OLLAMA_CONTEXT_LENGTH=32768` environment variable before restarting `ollama serve`, or create a custom Modelfile:
 ```
 FROM qwen2.5:7b
 PARAMETER num_ctx 32768
@@ -30,31 +30,31 @@ PARAMETER num_ctx 32768
 ```powershell
 ollama create qwen2.5-32k -f Modelfile
 ```
-Puis utiliser `qwen2.5-32k` comme `OLLAMA_MODEL_PRIMARY` dans `.env`.
+Then use `qwen2.5-32k` as `OLLAMA_MODEL_PRIMARY` in `.env`.
 
-## Les agents Hermes sont très lents / le PC devient inutilisable
-Tu as probablement lancé trop d'agents simultanément avec un seul modèle 7-8B qui traite les requêtes en file. Solution :
-- N'utiliser que `docker-compose.lite.yml` (4 agents max).
-- Vérifier qu'un seul agent à la fois exécute une tâche lourde (limiter le cron des autres temporairement).
-- Envisager de réduire `OLLAMA_CONTEXT_SIZE` à 16384 si la RAM est vraiment limitée (< 16 Go).
+## Hermes agents are very slow / the PC becomes unusable
+You probably launched too many agents at once with a single 7-8B model that processes requests one by one. Solution:
+- Only use `docker-compose.lite.yml` (max 4 agents).
+- Make sure only one agent at a time runs a heavy task (temporarily limit the others' cron).
+- Consider lowering `OLLAMA_CONTEXT_SIZE` to 16384 if RAM is really tight (< 16 GB).
 
-## "host.docker.internal" ne résout pas depuis un conteneur
-Sous Docker Desktop pour Windows, ce nom DNS est résolu automatiquement. Si ça échoue, vérifier la version de Docker Desktop (mettre à jour) ou remplacer temporairement par l'IP locale de la machine hôte (`ipconfig` → adresse WSL).
+## "host.docker.internal" doesn't resolve from a container
+On Docker Desktop for Windows, this DNS name is resolved automatically. If it fails, check your Docker Desktop version (update it) or temporarily replace it with the host machine's local IP (`ipconfig` → WSL address).
 
-## Ollama consomme toute la RAM même à l'arrêt apparent
+## Ollama eats all the RAM even when seemingly stopped
 ```powershell
 ollama ps
 ollama stop qwen2.5:7b
 ```
-Pour libérer le modèle de la mémoire entre deux sessions de travail.
+Unloads the model from memory between work sessions.
 
-## Gitea inaccessible sur localhost:3000
-Vérifier que le conteneur est bien démarré :
+## Gitea unreachable on localhost:3000
+Make sure the container is actually running:
 ```bash
 docker compose ps gitea
 docker compose logs gitea
 ```
-Au premier lancement, il faut initialiser Gitea manuellement via l'interface web (création admin) avant de générer le token d'accès pour `.env`.
+On first launch, Gitea must be initialized manually through the web interface (admin creation) before generating the access token for `.env`.
 
-## VS Code n'affiche pas le dossier WSL
-Vérifier que l'extension "WSL" (ms-vscode-remote.remote-wsl) est bien installée et à jour. Redémarrer VS Code après installation.
+## VS Code doesn't show the WSL folder
+Make sure the "WSL" extension (ms-vscode-remote.remote-wsl) is installed and up to date. Restart VS Code after installing it.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Vérifie la chaîne d'audit (scripts/verify-audit.ts).
- * Usage: tsx scripts/verify-audit.ts  (requiert DATABASE_URL)
+ * Verifies the audit chain (scripts/verify-audit.ts).
+ * Usage: tsx scripts/verify-audit.ts  (requires DATABASE_URL)
  */
 import { loadConfig } from '../src/config.js';
 import { PgRepository } from '../src/db/repository.js';
@@ -13,9 +13,9 @@ async function main(): Promise<void> {
   try {
     const res = await verifyAuditChain(repo);
     if (res.ok) {
-      console.log('[verify-audit] chaîne intègre ✔');
+      console.log('[verify-audit] chain intact ✔');
     } else {
-      console.error(`[verify-audit] RUPTURE à seq=${res.brokenAt ?? '?'} (${res.reason ?? 'inconnu'})`);
+      console.error(`[verify-audit] CHAIN BREAK at seq=${res.brokenAt ?? '?'} (${res.reason ?? 'unknown'})`);
       process.exitCode = 2;
     }
   } finally {

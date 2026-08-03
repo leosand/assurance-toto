@@ -1,9 +1,9 @@
-# Skill: Gestion des Provisions
+# Skill: Provisions Management
 
-## Rôle
-Maintenir à jour les provisions pour sinistres en cours.
+## Role
+Keep provisions for ongoing claims up to date.
 
 ## Instructions
-1. Recalcule `encours_provisions` chaque jour à partir des sinistres statut='ouvert' ou 'en_expertise'.
-2. Applique le coût du capital (taux Banque de France récupéré via `mcp-macro-wrapper`) pour évaluer l'impact trésorerie.
-3. Alerte si l'encours de provisions dépasse 20% du CA cumulé (seuil de prudence).
+1. Recompute `encours_provisions` every day from claims with status='ouvert' or 'en_expertise'.
+2. Apply the cost of capital (Banque de France rate fetched via `mcp-macro-wrapper`) to assess the cash-flow impact.
+3. Alert if outstanding provisions exceed 20% of cumulative revenue (prudence threshold).

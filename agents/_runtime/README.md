@@ -1,81 +1,82 @@
 # @assurance-toto/hermes-runtime
 
-Runtime **Hermes Agent** — le « cerveau » réutilisable dont chaque agent métier
-(orchestrateur, sales, souscription, sinistres-contentieux) est une instance
-configurée. TypeScript / Node 20, strict/no-any, **zéro API payante**, LLM **local
-Ollama uniquement**.
+**Hermes Agent** runtime — the reusable "brain" of which each business agent
+(orchestrateur, sales, souscription, sinistres-contentieux) is a configured
+instance. TypeScript / Node 20, strict/no-any, **zero paid APIs**, **local
+Ollama only** LLM.
 
-## Principe
+## Principle
 
-Le LLM local **décide et recommande** ; il n'écrit jamais en dur d'affaires. La
-boucle transforme la recommandation structurée en **commande typée** et la POSTE
-au bridge `buzz-hermes-bridge` (`POST /commands`), qui applique politique,
-idempotence, audit et effets transactionnels. L'agent n'écrit directement que
-dans `memoire_agents` (son apprentissage), et lit en read-only.
+The local LLM **decides and recommends**; it never writes business data
+directly. The loop turns the structured recommendation into a **typed command**
+and POSTs it to the `buzz-hermes-bridge` bridge (`POST /commands`), which
+applies policy, idempotency, audit and transactional effects. The agent writes
+directly only to `memoire_agents` (its learning), and reads in read-only mode.
 
 ```
-tâche ──► anonymize(PII) ──► Ollama /api/chat (tools filtrés par allowlist)
-                                  │ tool_calls
-                                  ▼
-                     registre d'outils (read-only DB / calculs / mémoire)
-                                  │ recommander_reglement
-                                  ▼
-                  candidateCommand claim.settlement.approve
-                                  │ (kill-switch OK ?)
-                                  ▼
-              POST {BRIDGE_URL}/commands {command, author_pubkey, correlation_id}
+task ──► anonymize(PII) ──► Ollama /api/chat (tools filtered by allowlist)
+          │  tool_calls
+          ▼
+        tool registry (read-only DB / computations / memory)
+          │  recommander_reglement
+          ▼
+        candidateCommand claim.settlement.approve
+          │  (kill-switch OK ?)
+          ▼
+        POST {BRIDGE_URL}/commands  {command, author_pubkey, correlation_id}
 ```
 
 ## Modules
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
 | `src/config.ts` | Env → `HermesConfig` (AGENT_ROLE, OLLAMA_*, DATABASE_URL, BRIDGE_URL, …) |
-| `src/security/killswitch.ts` | Sonde `kill_switch` (cache ≤ 2 s), gate avant chaque action |
-| `src/security/allowlist.ts` | Allowlist JSON par agent, **deny-by-default** |
-| `src/privacy/anonymize.ts` | Presidio `/analyze`+`/anonymize`, fallback regex (email/tel/IBAN/NIR), `assertNoPii` |
-| `src/llm/ollama.ts` | `chat(tools)` natif + `embed()` 768 dims, timeout + 1 retry |
-| `src/tools/tools.ts` | Registre : lire_sinistre/client/contrat, calculer_prime, evaluer_risque, qualifier_lead, recommander_reglement, requeter_pnl, consulter_memoire |
-| `src/runtime/agent.ts` | Boucle bornée (≤ 6 itérations), prompt système, POST bridge, mémoire |
-| `src/skills/loader.ts` | Charge `*.md` (frontmatter) depuis SKILLS_DIR |
-| `src/composition.ts` | Composition root (prod + seams de test) |
-| `src/server.ts` | fastify : /healthz, /readyz, POST /task, mode autonome (optionnel) |
+| `src/security/killswitch.ts` | `kill_switch` probe (cache ≤ 2 s), gate before each action |
+| `src/security/allowlist.ts` | Per-agent JSON allowlist, **deny-by-default** |
+| `src/privacy/anonymize.ts` | Presidio `/analyze`+`/anonymize`, regex fallback (email/tel/IBAN/NIR), `assertNoPii` |
+| `src/llm/ollama.ts` | Native `chat(tools)` + `embed()` 768 dims, timeout + 1 retry |
+| `src/tools/tools.ts` | Registry: lire_sinistre/client/contrat, calculer_prime, evaluer_risque, qualifier_lead, recommander_reglement, requeter_pnl, consulter_memoire |
+| `src/runtime/agent.ts` | Bounded loop (≤ 6 iterations), system prompt, bridge POST, memory |
+| `src/skills/loader.ts` | Loads `*.md` (frontmatter) from SKILLS_DIR |
+| `src/composition.ts` | Composition root (prod + test seams) |
+| `src/server.ts` | fastify: /healthz, /readyz, POST /task, autonomous mode (optional) |
 | `src/index.ts` | Entrypoint + graceful shutdown |
 
-## Contrat bridge (assumption validée sur `buzz-hermes-bridge/src/http/server.ts`)
+## Bridge contract (assumption validated against `buzz-hermes-bridge/src/http/server.ts`)
 
 ```jsonc
 POST {BRIDGE_URL}/commands
 {
-  "command":        { /* validé par ajv — cf. commands/schemas.ts */ },
+  "command":        { /* validated by ajv — cf. commands/schemas.ts */ },
   "author_pubkey":  "<AGENT_NPUB>",
-  "correlation_id": "<uuid>"        // optionnel mais toujours fourni par le runtime
+  "correlation_id": "<uuid>"    // optional but always provided by the runtime
 }
 ```
 
-`recommander_reglement` génère une commande `claim.settlement.approve` conforme à
-`claimSettlementApprove` : `{type, claim_id, max_amount_eur, reason, approved_by, requested_at(date-time)}`.
+`recommander_reglement` generates a `claim.settlement.approve` command conforming to
+`claimSettlementApprove`: `{type, claim_id, max_amount_eur, reason, approved_by, requested_at(date-time)}`.
 
-## Variables d'environnement
+## Environment variables
 
-Voir `src/config.ts`. Défauts docker-compose : `OLLAMA_HOST=http://host.docker.internal:11434`,
+See `src/config.ts`. docker-compose defaults: `OLLAMA_HOST=http://host.docker.internal:11434`,
 `BRIDGE_URL=http://buzz-hermes-bridge:3100`, `PRESIDIO_URL=http://presidio-analyzer:3000`,
 `DATABASE_URL=postgres://postgres:postgres@postgres:5432/assurance_toto`,
 `SKILLS_DIR=/workspace/skills`, `HERMES_ESCALATION_THRESHOLD_EUR=5000`,
-`AUTONOMY_INTERVAL_SECONDS=0` (autonomie coupée par défaut).
+`AUTONOMY_INTERVAL_SECONDS=0` (autonomy off by default).
 
-## Développement
+## Development
 
 ```bash
 npm install
-npm run build   # tsc strict — doit passer
-npm test        # vitest, 16 tests hermétiques (aucun réseau/pg/docker)
-npm start       # nécessite Postgres + Ollama réels
+npm run build    # tsc strict — must pass
+npm test         # vitest, 16 hermetic tests (no network/pg/docker)
+npm start        # requires real Postgres + Ollama
 ```
 
 ## Tests
 
-Vitest, tout mocké via seams (db/ollama/bridge/anonymizer). Couvre : parsing et
-exécution d'un tool call, POST bridge avec correlation_id, allowlist deny-by-default,
-kill-switch (refus + cache + fail-closed), anonymisation PII (regex fallback +
-Presidio), fallback structuré sans tool_calls. Aucun accès réseau ou base réelle.
+Vitest, everything mocked via seams (db/ollama/bridge/anonymizer). Covers: parsing
+and execution of a tool call, bridge POST with correlation_id, deny-by-default
+allowlist, kill-switch (refusal + cache + fail-closed), PII anonymization (regex
+fallback + Presidio), structured fallback without tool_calls. No network or real
+database access.

@@ -1,60 +1,60 @@
-# CEO Guide — Supervision rapide
+# CEO Guide — Quick Supervision
 
-Ce document fournit aux dirigeants les commandes et points d'accès essentiels pour superviser l'état du jumeau numérique "Assurance Toto".
+This document provides executives with the essential commands and access points to supervise the state of the "Assurance Toto" digital twin.
 
-1) Vue d'ensemble des services
+1) Services overview
 
- - Lancer la vue d'état :
+ - Launch the status view:
 ```bash
 docker compose -f docker-compose.lite.yml ps
 ```
 
-2) Interfaces web utiles
+2) Useful web interfaces
 
- - Gitea (dépôts) : http://localhost:3000
- - Rocket.Chat (communication interne) : http://localhost:3001
- - MailHog (emails envoyés) : http://localhost:8025
+ - Gitea (repositories) : http://localhost:3000
+ - Rocket.Chat (internal communication) : http://localhost:3001
+ - MailHog (sent emails) : http://localhost:8025
 
-3) Surveillance en temps réel
+3) Real-time monitoring
 
- - Suivre les logs d'un agent :
+ - Follow an agent's logs:
 ```bash
 docker compose -f docker-compose.lite.yml logs -f agent-sales
 ```
 
- - Statistiques d'utilisation Docker (CPU / RAM par conteneur) :
+ - Docker usage statistics (CPU / RAM per container):
 ```bash
 docker stats --no-stream
 ```
 
-4) Commandes opérationnelles fréquentes
+4) Frequent operational commands
 
- - Redémarrer un agent problématique :
+ - Restart a problematic agent:
 ```bash
 docker compose -f docker-compose.lite.yml restart agent-sales
 ```
 
- - Rebuild complet (si mise à jour du code ou configs) :
+ - Full rebuild (after code or config updates):
 ```bash
 docker compose -f docker-compose.lite.yml build --no-cache
 docker compose -f docker-compose.lite.yml up -d
 ```
 
-5) Audit et logs historiques
+5) Audit and historical logs
 
- - Exporter les logs d'un conteneur :
+ - Export a container's logs:
 ```bash
 docker logs --since="24h" toto-agent-sales > /tmp/agent-sales-logs-24h.log
 ```
 
-6) Remarques de sécurité et conformité
+6) Security and compliance notes
 
- - Les fichiers `hermes.config.json` définissent les endpoints MCP et la `tools_allowlist`. Ne partagez pas ces fichiers hors de l'organisation.
- - Pour conformité et audit, je recommande d'ajouter une pipeline d'archivage des logs vers un stockage chiffré (S3/Blob) et d'activer des tableaux de bord Grafana si besoin.
+ - The `hermes.config.json` files define the MCP endpoints and the `tools_allowlist`. Do not share these files outside the organization.
+ - For compliance and audit purposes, I recommend adding a log-archiving pipeline to encrypted storage (S3/Blob) and enabling Grafana dashboards if needed.
 
-Fichiers modifiés récemment (résumé) :
+Recently modified files (summary):
 
- - `docker-compose.lite.yml` — suppression de `version` et usage de Dockerfiles locaux par agent
- - `agents/*/Dockerfile` — Dockerfile local ajouté pour corriger les erreurs de `COPY`
- - `scripts/fix-docker-creds.sh` — utilitaire pour résoudre les erreurs de credential helper Docker
- - `CHANGELOG.md` et `setup-hermes-windows/CHANGELOG-SETUP.md` — mise à jour des notes de version
+ - `docker-compose.lite.yml` — removed `version` and switched to per-agent local Dockerfiles
+ - `agents/*/Dockerfile` — added local Dockerfile to fix `COPY` errors
+ - `scripts/fix-docker-creds.sh` — utility to resolve Docker credential helper errors
+ - `CHANGELOG.md` and `setup-hermes-windows/CHANGELOG-SETUP.md` — updated release notes

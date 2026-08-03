@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-seed_faker.py — Données 100 % synthétiques pour Assurance Toto (schéma v2).
+seed_faker.py — 100% synthetic data for Assurance Toto (v2 schema).
 
-- PII françaises fictives via Faker (locale fr_FR).
-- Déterministe : Faker.seed(SEED) + random.seed(SEED) => mêmes données à chaque run.
-- Connexion via l'environnement : PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE
-  (défauts : localhost, 5432, postgres, postgres, assurance_toto).
-- --scale-maison : petit portefeuille cohérent (~120 clients, 200 contrats,
-  60 sinistres) avec ratio de sinistralité ~65-75 %, écritures pnl_ledger
-  correspondantes (prime +, reglement/provision -, frais -), 3 lignes
-  macro_indicateurs et la ligne kill_switch (id=1, actif=false).
+- Fictional French PII via Faker (fr_FR locale).
+- Deterministic: Faker.seed(SEED) + random.seed(SEED) => same data on every run.
+- Connection via environment: PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE
+  (defaults: localhost, 5432, postgres, postgres, assurance_toto).
+- --scale-maison: small coherent portfolio (~120 clients, 200 contracts,
+  60 claims/sinistres) with a ~65-75% claims ratio, matching pnl_ledger
+  writes (premium +, settlement/reserves -, expenses -), 3 macro_indicateurs
+  rows and the kill_switch row (id=1, actif=false).
 
-Convention de signe pnl_ledger : RECETTES positives (prime), CHARGES négatives
-(provision, reglement, frais, marketing). Résultat net = SUM(montant).
-Voir infra/postgres/schema_v2.sql et infra/postgres/README.md.
+pnl_ledger sign convention: REVENUE positive (premium), EXPENSES negative
+(reserves, settlement, expenses, marketing). Net result = SUM(montant).
+See infra/postgres/schema_v2.sql and infra/postgres/README.md.
 
-Dépendances : psycopg2-binary, faker.
-Usage :
+Dependencies: psycopg2-binary, faker.
+Usage:
     python seed_faker.py --clients 5000 --contrats 3000 --sinistres 800
     python seed_faker.py --scale-maison
 """
@@ -34,7 +34,7 @@ fake = Faker("fr_FR")
 Faker.seed(SEED)
 random.seed(SEED)
 
-# Répartition réaliste des statuts (~ 93 % de sinistres clos).
+# Realistic status distribution (~ 93% of claims/sinistres closed).
 STATUTS_SINISTRE = ["ouvert"] * 2 + ["en_cours"] * 5 + ["regle"] * 70 + ["refuse"] * 18 + ["contentieux"] * 5
 TOUTES_FRANCHISES = ("auto", "auto", "auto", "habitation", "sante", "vie")
 
@@ -44,7 +44,7 @@ MACRO_INDICATEURS = [
     ("gpr", 132.5, "2026-06", "Caldara-Iacoviello GPR index"),
 ]
 
-# Statuts de sinistre produisant une écriture pnl_ledger, et leur catégorie.
+# Sinistre statuses producing a pnl_ledger entry, and their category.
 CATEGORIE_PNL_PAR_STATUT = {
     "ouvert": "provision",
     "en_cours": "provision",
@@ -54,7 +54,7 @@ CATEGORIE_PNL_PAR_STATUT = {
 
 
 def db_connect():
-    """Connexion PostgreSQL via variables d'environnement (défauts locaux)."""
+    """PostgreSQL connection via environment variables (local defaults)."""
     return psycopg2.connect(
         host=os.environ.get("PGHOST", "localhost"),
         port=int(os.environ.get("PGPORT", "5432")),
@@ -65,7 +65,7 @@ def db_connect():
 
 
 def seed_clients(cur, n):
-    """Insère n clients synthétiques, retourne la liste des ids."""
+    """Inserts n synthetic clients, returns the list of ids."""
     ids = []
     for _ in range(n):
         cur.execute(
@@ -87,7 +87,7 @@ def seed_clients(cur, n):
 
 
 def seed_contrats(cur, client_ids, n):
-    """Insère n contrats, retourne une liste de dicts {id, prime, date_debut}."""
+    """Inserts n contracts, returns a list of dicts {id, prime, date_debut}."""
     contrats = []
     for i in range(n):
         prime = round(random.uniform(300, 1500), 2)
@@ -116,9 +116,9 @@ def seed_contrats(cur, client_ids, n):
 
 def seed_sinistres(cur, contrats, n):
     """
-    Insère n sinistres. Retourne une liste de dicts :
+    Inserts n sinistres (claims). Returns a list of dicts:
     {id, contrat_id, date_sinistre, estime, regle, statut}.
-    En mode générique : montants aléatoires 500-10 000 EUR.
+    In generic mode: random amounts 500-10 000 EUR.
     """
     sinistres = []
     for _ in range(n):
@@ -152,22 +152,22 @@ def seed_sinistres(cur, contrats, n):
 
 
 def posted_claim_amount(sin):
-    """Montant comptabilisé en pnl_ledger pour un sinistre (0 si refuse)."""
+    """Amount posted to pnl_ledger for a sinistre (0 if refused)."""
     categorie = CATEGORIE_PNL_PAR_STATUT.get(sin["statut"])
-    if categorie is None:  # refuse : aucune charge comptabilisée
+    if categorie is None:  # refuse: no expense posted
         return 0.0
     return sin["regle"] if categorie == "reglement" else sin["estime"]
 
 
 def rescale_sinistres(cur, sinistres, target_total):
     """
-    Recale en base (UPDATE par id primaire) les montants comptabilisés des
-    sinistres pour que la somme (règlements + provisions) égale exactement
-    target_total => ratio de sinistralité maîtrisé (~65-75 % des primes).
-    Les montants POSTÉS (pas les estimés) sont mis à l'échelle, puis le
-    résidu d'arrondi est absorbé par la dernière ligne postée.
-    Invariant de cohérence : montant_estime >= montant_regle.
-    Déterministe (random.seed global).
+    Rescales in DB (UPDATE by primary id) the posted amounts of the
+    sinistres so that the sum (settlements + reserves) equals exactly
+    target_total => controlled claims ratio (~65-75% of premiums).
+    The POSTED amounts (not the estimates) are scaled, then the rounding
+    residue is absorbed by the last posted row.
+    Consistency invariant: montant_estime >= montant_regle.
+    Deterministic (global random.seed).
     """
     posted = [(i, posted_claim_amount(s)) for i, s in enumerate(sinistres)]
     posted = [(i, m) for i, m in posted if m > 0]
@@ -176,14 +176,14 @@ def rescale_sinistres(cur, sinistres, target_total):
         return
     factor = target_total / raw_total
     news = [round(m * factor, 2) for _, m in posted]
-    # Absorption du résidu d'arrondi pour un total EXACT (= target_total).
+    # Absorb the rounding residue for an EXACT total (= target_total).
     news[-1] = round(news[-1] + (target_total - sum(news)), 2)
     for (i, _), p_new in zip(posted, news):
         sin = sinistres[i]
         if sin["statut"] == "regle":
             sin["regle"] = p_new
             sin["estime"] = round(p_new / random.uniform(0.85, 1.0), 2)
-        else:  # provision (ouvert, en_cours, contentieux)
+        else:  # reserve/provision (ouvert, en_cours, contentieux)
             sin["estime"] = p_new
             sin["regle"] = 0.0
         cur.execute(
@@ -194,13 +194,13 @@ def rescale_sinistres(cur, sinistres, target_total):
 
 def seed_pnl(cur, contrats, sinistres):
     """
-    Écritures pnl_ledger cohérentes (convention : recettes +, charges -) :
-    - prime       : + prime_annuelle par contrat      (departement 'auto')
-    - frais       : - 10 % de la prime (acquisition/gestion)
-    - reglement   : - montant_regle des sinistres regles
-    - provision   : - montant_estime des sinistres ouverts/en_cours/contentieux
-    created_at suit la date métier (contrat / sinistre) pour v_pnl_hebdo.
-    Retourne (nb_ecritures, total_primes, total_sinistres_comptabilises).
+    Coherent pnl_ledger writes (convention: revenue +, expenses -):
+    - prime       : + prime_annuelle per contract        (departement 'auto')
+    - frais       : - 10% of the premium (acquisition/management expenses)
+    - reglement   : - montant_regle of settled sinistres
+    - provision   : - montant_estime of open/in-progress/disputed sinistres
+    created_at follows the business date (contract / sinistre) for v_pnl_hebdo.
+    Returns (nb_writes, total_premiums, total_posted_sinistres).
     """
     n_rows = 0
     total_primes = 0.0
@@ -214,7 +214,7 @@ def seed_pnl(cur, contrats, sinistres):
             "INSERT INTO pnl_ledger (departement, categorie, montant, description, created_at) "
             "VALUES (%s, %s, %s, %s, %s)",
             ("finance", "frais", -round(c["prime"] * 0.10, 2),
-             "Frais d'acquisition et de gestion (10 % de la prime)", c["date_debut"]),
+             "Acquisition and management expenses (10% of the premium)", c["date_debut"]),
         )
         total_primes += c["prime"]
         n_rows += 2
@@ -229,7 +229,7 @@ def seed_pnl(cur, contrats, sinistres):
             "INSERT INTO pnl_ledger (departement, categorie, montant, description, created_at) "
             "VALUES (%s, %s, %s, %s, %s)",
             ("sinistres-contentieux", categorie, -montant,
-             f"Sinistre {s['statut']} (contrat {s['contrat_id']})", s["date_sinistre"]),
+             f"Sinistre {s['statut']} (contract {s['contrat_id']})", s["date_sinistre"]),
         )
         total_sinistres += montant
         n_rows += 1
@@ -246,20 +246,20 @@ def seed_macro(cur):
 
 
 def ensure_kill_switch(cur):
-    """Garantit la ligne kill_switch (id=1, actif=false). Idempotent."""
+    """Ensures the kill_switch row (id=1, actif=false). Idempotent."""
     cur.execute("INSERT INTO kill_switch (id, actif) VALUES (1, false) ON CONFLICT (id) DO NOTHING")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Seeder Faker fr_FR pour Assurance Toto")
-    parser.add_argument("--clients", type=int, default=5000, help="Nombre de clients")
-    parser.add_argument("--contrats", type=int, default=3000, help="Nombre de contrats")
-    parser.add_argument("--sinistres", type=int, default=800, help="Nombre de sinistres")
+    parser = argparse.ArgumentParser(description="Faker fr_FR seeder for Assurance Toto")
+    parser.add_argument("--clients", type=int, default=5000, help="Number of clients")
+    parser.add_argument("--contrats", type=int, default=3000, help="Number of contracts")
+    parser.add_argument("--sinistres", type=int, default=800, help="Number of sinistres (claims)")
     parser.add_argument(
         "--scale-maison",
         action="store_true",
-        help="Petit portefeuille cohérent : ~120 clients, 200 contrats, 60 sinistres, "
-        "ratio de sinistralité ~65-75 %%, pnl_ledger, macro_indicateurs, kill_switch.",
+        help="Small coherent portfolio: ~120 clients, 200 contracts, 60 sinistres, "
+        "claims ratio ~65-75%%, pnl_ledger, macro_indicateurs, kill_switch.",
     )
     args = parser.parse_args()
 
@@ -269,7 +269,7 @@ def main():
 
     conn = db_connect()
     try:
-        with conn:  # transaction unique : tout ou rien
+        with conn:  # single transaction: all or nothing
             with conn.cursor() as cur:
                 client_ids = seed_clients(cur, n_clients)
                 contrats = seed_contrats(cur, client_ids, n_contrats)
@@ -278,7 +278,7 @@ def main():
                 summary_extra = ""
                 if args.scale_maison:
                     total_primes = sum(c["prime"] for c in contrats)
-                    # Cible : 70 % des primes => ratio réalisé dans la bande 65-75 %.
+                    # Target: 70% of premiums => achieved ratio in the 65-75% band.
                     target = round(total_primes * 0.70, 2)
                     rescale_sinistres(cur, sinistres, target)
                     n_pnl, total_primes, total_sin = seed_pnl(cur, contrats, sinistres)
@@ -286,22 +286,22 @@ def main():
                     ensure_kill_switch(cur)
                     ratio = total_sin / total_primes * 100 if total_primes else 0.0
                     summary_extra = (
-                        f"   {n_pnl} écritures pnl_ledger\n"
-                        f"   Primes {total_primes:,.2f} EUR | "
-                        f"Sinistres comptabilisés {total_sin:,.2f} EUR | "
-                        f"Ratio de sinistralité {ratio:.1f} %\n"
+                        f"   {n_pnl} pnl_ledger writes\n"
+                        f"   Premiums {total_primes:,.2f} EUR | "
+                        f"Posted claims/sinistres {total_sin:,.2f} EUR | "
+                        f"Claims ratio {ratio:.1f} %\n"
                         f"   {len(MACRO_INDICATEURS)} macro_indicateurs\n"
-                        f"   kill_switch : ligne id=1 garantie (actif=false)"
+                        f"   kill_switch: row id=1 ensured (actif=false)"
                     )
 
                 n_regle = sum(1 for s in sinistres if s["statut"] == "regle")
                 total_regle = sum(s["regle"] for s in sinistres)
-                print(f"Seed terminé ({'scale-maison' if args.scale_maison else 'générique'}) :")
+                print(f"Seed done ({'scale-maison' if args.scale_maison else 'generic'}):")
                 print(f"   {len(client_ids)} clients")
                 print(f"   {len(contrats)} contrats")
                 print(
                     f"   {len(sinistres)} sinistres "
-                    f"({n_regle} réglés, {total_regle:,.2f} EUR réglés)"
+                    f"({n_regle} settled, {total_regle:,.2f} EUR settled)"
                 )
                 if summary_extra:
                     print(summary_extra)

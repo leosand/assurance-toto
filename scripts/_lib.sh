@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# scripts/_lib.sh — Helpers partagés (sourcé par les autres scripts).
-# Git Bash / WSL2 : LF only, pas de sudo, printf au lieu de echo -e.
+# scripts/_lib.sh — Shared helpers (sourced by the other scripts).
+# Git Bash / WSL2 : LF only, no sudo, printf instead of echo -e.
 
-# --- Couleurs (désactivées si pas de TTY) ---
+# --- Colors (disabled if no TTY) ---
 if [ -t 1 ]; then
   C_GREEN=$'\033[32m'; C_RED=$'\033[31m'; C_YELLOW=$'\033[33m'
   C_BLUE=$'\033[34m'; C_BOLD=$'\033[1m'; C_RST=$'\033[0m'
@@ -24,17 +24,17 @@ banner() {
 
 die() { log_err "$*"; exit 1; }
 
-# --- Chemin racine du repo (sourcé depuis scripts/ ou scripts/demo/) ---
+# --- Repo root path (sourced from scripts/ or scripts/demo/) ---
 repo_root() {
   local dir="$1"
   (cd "$dir" && pwd -P)
 }
 
-# --- Compose cible du profil MVP ---
+# --- Compose target for the MVP profile ---
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.lite.yml}"
 
 # Compose command array builder. Usage: lib_compose "$ROOT_DIR"
-# Produit la variable globale DC=(docker compose -f ... [--env-file .env])
+# Produces the global variable DC=(docker compose -f ... [--env-file .env])
 lib_compose() {
   local root="$1"
   if [ -f "$root/.env" ]; then
@@ -44,18 +44,18 @@ lib_compose() {
   fi
 }
 
-# --- Chargement d'un fichier env (KEY=VALUE, tolère commentaires) ---
-# Usage: load_env_file <file> ; exporte dans l'environnement courant.
+# --- Load an env file (KEY=VALUE, tolerates comments) ---
+# Usage: load_env_file <file> ; exported in the current environment.
 load_env_file() {
   local f="$1"
-  [ -f "$f" ] || die "Fichier env manquant: $f"
+  [ -f "$f" ] || die "Env file missing: $f"
   set -a
   # shellcheck disable=SC1090
   . "$f"
   set +a
 }
 
-# Lecture d'une clé dans un fichier env sans le sourcer (sûr).
+# Read a key in an env file without sourcing it (safer).
 env_file_get() {
   local f="$1" key="$2"
   [ -f "$f" ] || return 1
@@ -66,14 +66,14 @@ require_env() {
   local missing=0
   for v in "$@"; do
     if [ -z "${!v:-}" ]; then
-      log_err "Variable requise absente: $v"
+      log_err "Required variable missing: $v"
       missing=1
     fi
   done
   [ "$missing" -eq 0 ] || exit 1
 }
 
-# --- Attente HTTP ---
+# --- HTTP wait ---
 # wait_http <url> [timeout_s] [expected_status=200]
 wait_http() {
   local url="$1" timeout="${2:-60}" expect="${3:-200}" waited=0 code
@@ -84,24 +84,24 @@ wait_http() {
     fi
     sleep 2; waited=$((waited + 2))
   done
-  log_err "Timeout ${timeout}s en attente de ${url} (dernier code: ${code})"
+  log_err "Timeout ${timeout}s waiting for ${url} (last code: ${code})"
   return 1
 }
 
-# --- Wrapper psql côté conteneur postgres métier ---
-# psql_exec <args...>  — exécute `psql` via docker compose exec -T postgres.
-# Nécessite DC (lib_compose appelé avant) + env PG_USER/PG_DB.
+# --- psql wrapper on the business postgres container ---
+# psql_exec <args...>  — executes `psql` via docker compose exec -T postgres.
+# Requires DC (lib_compose called first) + env PG_USER/PG_DB.
 psql_exec() {
   "${DC[@]}" exec -T postgres psql -U "$PG_USER" -d "$PG_DB" "$@"
 }
 
-# psql_cell <sql> — une seule valeur, sans en-têtes, format CSV brut.
+# psql_cell <sql> — single value, no headers, raw CSV format.
 psql_cell() {
   psql_exec -t -A -c "$1" | tr -d '\r' | head -1
 }
 
-# --- Wrapper HTTP avec code + corps séparés ---
-# http_post <url> <json_body> ; affiche "<code> <body>" sur stdout.
+# --- HTTP wrapper with separate code + body ---
+# http_post <url> <json_body> ; prints "<code> <body>" on stdout.
 http_post() {
   local url="$1" body="$2" tmp
   tmp="$(mktemp)"
@@ -120,7 +120,7 @@ http_get() {
   rm -f "$tmp"
 }
 
-# --- json_extract <json> <champ> : jq si présent, sinon python, sinon node ---
+# --- json_extract <json> <field> : jq if present, else python, else node ---
 json_extract() {
   local json="$1" field="$2"
   if command -v jq >/dev/null 2>&1; then
@@ -157,7 +157,7 @@ try{
 }catch(e){}
 });" "$field" 2>/dev/null
   else
-    die "Ni jq, ni python3, ni node disponible pour parser le JSON"
+    die "Neither jq, python3, nor node available to parse the JSON"
   fi
 }
 
@@ -172,7 +172,7 @@ gen_uuid() {
   fi
 }
 
-# --- horodatage ISO-8601 UTC ---
+# --- ISO-8601 UTC timestamp ---
 now_iso() {
   date -u +'%Y-%m-%dT%H:%M:%SZ'
 }

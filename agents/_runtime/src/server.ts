@@ -1,12 +1,12 @@
 /**
- * Serveur HTTP minimal (fastify) de l'agent :
+ * Minimal HTTP server (fastify) for the agent:
  *  - GET  /healthz  → ok
  *  - GET  /readyz   → ping pg + ollama
- *  - POST /task     → { title, description, correlation_id? } déclenche runTask
+ *  - POST /task     → { title, description, correlation_id? } triggers runTask
  *
- * Mode autonome optionnel : si AUTONOMY_INTERVAL_SECONDS > 0, un timer demande
- * périodiquement à l'agent de PROPOSER et traiter des tâches. Chaque tick est
- * gated par le kill-switch (dans runTask) et arrêté proprement au shutdown.
+ * Optional autonomous mode: if AUTONOMY_INTERVAL_SECONDS > 0, a timer periodically
+ * asks the agent to PROPOSE and process tasks. Each tick is gated by the
+ * kill-switch (inside runTask) and cleanly stopped on shutdown.
  */
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Runtime } from './composition.js';
@@ -21,7 +21,7 @@ export interface ServerHandle {
   close(): Promise<void>;
 }
 
-/** Validation manuelle minimale du corps POST /task (zéro dépendance schéma). */
+/** Minimal manual validation of the POST /task body (zero schema dependency). */
 function parseTaskBody(raw: unknown):
   | { ok: true; value: TaskInput }
   | { ok: false; error: string } {
@@ -33,14 +33,14 @@ function parseTaskBody(raw: unknown):
   const description = o['description'];
   const correlationId = o['correlation_id'];
   if (typeof title !== 'string' || title.trim().length === 0 || title.length > 500) {
-    return { ok: false, error: "'title' requis (string ≤ 500)" };
+    return { ok: false, error: "'title' required (string ≤ 500)" };
   }
   if (typeof description !== 'string' || description.trim().length === 0 || description.length > 8_000) {
-    return { ok: false, error: "'description' requise (string ≤ 8000)" };
+    return { ok: false, error: "'description' required (string ≤ 8000)" };
   }
   if (correlationId !== undefined) {
     if (typeof correlationId !== 'string' || !UUID_RE.test(correlationId)) {
-      return { ok: false, error: "'correlation_id' doit être un UUID" };
+      return { ok: false, error: "'correlation_id' must be a UUID" };
     }
   }
   return {
@@ -81,32 +81,32 @@ export async function startServer(runtime: Runtime): Promise<ServerHandle> {
     if (!parsed.ok) {
       return reply.code(400).send({ ok: false, error: 'body.invalid', detail: parsed.error });
     }
-    logger.info({ action: 'http.task' }, 'tâche reçue');
+    logger.info({ action: 'http.task' }, 'task received');
     const result = await agent.runTask(parsed.value);
     const code = result.stoppedByKillSwitch ? 409 : 200;
     return reply.code(code).send({ ok: !result.stoppedByKillSwitch, result });
   });
 
-  // ---------- mode autonome ----------
+  // ---------- autonomous mode ----------
   let autonomyTimer: NodeJS.Timeout | null = null;
   const intervalSec = cfg.autonomyIntervalSeconds;
   if (intervalSec > 0) {
     logger.info(
       { action: 'autonomy.enabled', interval_s: intervalSec, role: cfg.role },
-      'mode autonome activé',
+      'autonomous mode enabled',
     );
     autonomyTimer = setInterval(() => {
       void (async () => {
         try {
           await agent.runTask({
-            title: 'proposition-autonome',
+            title: 'autonomous-proposal',
             description:
-              'Mode autonome : propose la prochaine tâche pertinente pour ton département et traite-la.',
+              'Autonomous mode: propose the next relevant task for your department and process it.',
           });
         } catch (err) {
           logger.warn(
             { err: err instanceof Error ? err.message : String(err) },
-            'tick autonome en erreur',
+            'autonomous tick error',
           );
         }
       })();
@@ -115,7 +115,7 @@ export async function startServer(runtime: Runtime): Promise<ServerHandle> {
   }
 
   await app.listen({ host: '0.0.0.0', port: cfg.port });
-  logger.info({ action: 'http.listening', port: cfg.port, role: cfg.role }, 'agent Hermes à l’écoute');
+  logger.info({ action: 'http.listening', port: cfg.port, role: cfg.role }, 'Hermes agent listening');
 
   return {
     app,

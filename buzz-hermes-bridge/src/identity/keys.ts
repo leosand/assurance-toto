@@ -4,7 +4,7 @@ import { decode, npubEncode } from 'nostr-tools/nip19';
 import { finalizeEvent, generateSecretKey, getPublicKey, verifyEvent } from 'nostr-tools/pure';
 import type { EventTemplate, VerifiedEvent } from 'nostr-tools/pure';
 
-/** Paires de clés Nostr : une par identité (CEO + agents). Jamais logguées en clair. */
+/** Nostr key pairs: one per identity (CEO + agents). Never logged in plaintext. */
 export interface KeyPair {
   secretKey: Uint8Array;
   publicHex: string;
@@ -20,13 +20,13 @@ export function parseSecretKey(input: string): KeyPair {
   } else if (/^[0-9a-f]{64}$/i.test(input)) {
     sk = hexToBytes(input.toLowerCase());
   } else {
-    throw new Error('Format de clé non supporté (nsec1… ou hex64 attendu)');
+    throw new Error('Unsupported key format (expected nsec1… or hex64)');
   }
   const publicHex = getPublicKey(sk);
   return { secretKey: sk, publicHex, npub: npubEncode(publicHex) };
 }
 
-/** npub → hex (pour comparaison avec BRIDGE_CEOPUBKEYS). Tolère déjà un hex. */
+/** npub → hex (for comparison with BRIDGE_CEOPUBKEYS). Already tolerates hex. */
 export function normalizePubkey(input: string): string {
   const t = input.trim();
   if (/^[0-9a-f]{64}$/i.test(t)) return t.toLowerCase();
@@ -43,12 +43,12 @@ export function signEvent(sk: Uint8Array, template: EventTemplate): VerifiedEven
   return finalizeEvent(template, sk);
 }
 
-/** Vérifie une signature NIP-01 sur un événement structuré (pas d'any). */
+/** Verifies a NIP-01 signature on a structured event (no any). */
 export function verifySignedEvent(ev: VerifiedEvent): boolean {
   return verifyEvent(ev);
 }
 
-/** Empreinte stable affichable dans les logs sans exposer la clé. */
+/** Stable fingerprint that can be shown in logs without exposing the key. */
 export function keyFingerprint(npub: string): string {
   return createHash('sha256').update(npub).digest('hex').slice(0, 12);
 }

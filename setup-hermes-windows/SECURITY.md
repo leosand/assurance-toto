@@ -1,21 +1,21 @@
-# Politique de Sécurité — Assurance Toto
+# Security Policy — Assurance Toto
 
-## Principes
+## Principles
 
-- **Least privilege MCP** : chaque agent Hermes n'a accès qu'aux outils MCP strictement nécessaires à son département (voir `security/mcp-allowlist.json`).
-- **Anonymisation PII systématique** : tout texte contenant NIR, IBAN, plaque d'immatriculation ou données de santé passe par Presidio avant d'atteindre le contexte LLM.
-- **Segmentation réseau** : `net-core` (Postgres/Redis) n'est jamais accessible aux agents connectés à `net-external` (Sales, Marketing).
-- **Approval mode** : toute action dépassant les seuils définis dans `.env` (`HERMES_ESCALATION_THRESHOLD_EUR`) requiert une validation CEO avant exécution.
-- **Audit trail** : toutes les décisions d'agents sont journalisées et versionnées automatiquement dans Gitea (`decisions/ceo-log.md`, `reports/`).
+- **Least privilege MCP**: each Hermes agent only has access to the MCP tools strictly required by its department (see `security/mcp-allowlist.json`).
+- **Systematic PII anonymization**: any text containing NIR, IBAN, license plate numbers or health data goes through Presidio before reaching the LLM context.
+- **Network segmentation**: `net-core` (Postgres/Redis) is never accessible to agents connected to `net-external` (Sales, Marketing).
+- **Approval mode**: any action exceeding the thresholds defined in `.env` (`HERMES_ESCALATION_THRESHOLD_EUR`) requires CEO validation before execution.
+- **Audit trail**: all agent decisions are logged and automatically versioned in Gitea (`decisions/ceo-log.md`, `reports/`).
 
-## Signaler une faille
+## Reporting a Vulnerability
 
-Ce projet étant un démonstrateur local, aucune donnée réelle ne doit jamais y être injectée. Toute vulnérabilité découverte dans la config Docker/MCP peut être documentée directement dans une issue Gitea locale.
+Since this project is a local demonstrator, no real data must ever be injected into it. Any vulnerability discovered in the Docker/MCP configuration can be documented directly in a local Gitea issue.
 
-## Checklist avant déploiement
+## Pre-Deployment Checklist
 
-- [ ] Tous les mots de passe `.env` ont été changés (aucun `changeme_*` restant)
-- [ ] `mcp-allowlist.json` validé pour chaque agent
-- [ ] Réseaux Docker correctement segmentés (`net-core`, `net-dept`, `net-external`)
-- [ ] Presidio actif et testé sur un jeu de données PII synthétiques
-- [ ] Seuils d'escalade CEO définis et cohérents avec la taille simulée de l'entreprise
+- [ ] All `.env` passwords have been changed (no remaining `changeme_*`)
+- [ ] `mcp-allowlist.json` validated for each agent
+- [ ] Docker networks properly segmented (`net-core`, `net-dept`, `net-external`)
+- [ ] Presidio active and tested on a synthetic PII dataset
+- [ ] CEO escalation thresholds defined and consistent with the simulated company size

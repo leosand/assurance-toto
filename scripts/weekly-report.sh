@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# scripts/weekly-report.sh — Déclenche manuellement le calcul du rapport hebdomadaire (hors cron)
+# scripts/weekly-report.sh — Manually triggers the weekly report computation (outside cron)
 set -e
-echo "📊 Génération manuelle du rapport hebdomadaire..."
+echo "📊 Manual generation of the weekly report..."
 docker compose run --rm gamification-engine python pnl_calculator.py
-echo "✅ Rapport généré dans ./reports/latest.md"
+echo "✅ Report generated in ./reports/latest.md"
 cat reports/latest.md

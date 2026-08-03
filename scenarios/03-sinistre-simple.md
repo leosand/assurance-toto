@@ -1,10 +1,10 @@
-# Scénario 03 — Sinistre Simple
+# Scenario 03 — Simple Claim (Sinistre)
 
 ## Injection
-Simuler un ticket support : "Client déclare un bris de glace suite à un impact de gravillon, contrat #XXXX actif."
+Simulate a support ticket: "Customer reports a windscreen chip after a gravel impact, active contract #XXXX."
 
-## Résultat attendu
-- Ticket transmis automatiquement de `agent-support` à `agent-sinistres-contentieux`
-- Dossier sinistre ouvert, provision estimée (~300-600€ pour bris de glace)
-- Notification Finance pour constitution de provision
-- Clôture du dossier sous 5 jours simulés
+## Expected outcome
+- Ticket automatically handed from `agent-support` to `agent-sinistres-contentieux`
+- Claim (sinistre) file opened, estimated provision (~300-600€ for windscreen damage)
+- Finance notification to set up the provision
+- File closed within 5 simulated days

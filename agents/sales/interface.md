@@ -1,24 +1,24 @@
-# Interface — Agent SALES
+# Interface — SALES Agent
 
-Instance du runtime Hermes, rôle `sales`. Prospection, qualification de leads, devis auto indicatifs.
-**Ne recommande JAMAIS de règlement** (hors périmètre).
+Instance of the Hermes runtime, role `sales`. Prospecting, lead qualification, indicative car quotes.
+**NEVER recommends a settlement** (out of scope).
 
-## Entrées
-- `POST /task` `{ "title", "description", "correlation_id"? }` — ex. « qualifier le lead n°42 », « calculer un devis ».
+## Inputs
+- `POST /task` `{ "title", "description", "correlation_id"? }` — e.g. "qualify lead #42", "compute a quote".
 - `GET /healthz`, `GET /readyz`.
 
-## Outils internes autorisés
+## Authorized internal tools
 `qualifier_lead`, `calculer_prime`, `lire_client`, `lire_contrat`, `consulter_memoire`.
 
 ## MCP (via gateway)
-`mcp-postgres` (lecture seule), `searxng` (recherche web), `mailhog` (emails entrants).
+`mcp-postgres` (read-only), `searxng` (web search), `mailhog` (inbound emails).
 
-## Sorties
-`TaskResult` structuré. Un appel `qualifier_lead` retourne `{ score: 0..1, decision: "qualifie"|"perdu" }`.
-`calculer_prime` retourne `{ prime_annuelle_eur, base_eur, facteurs }` (indicatif — le tarif final relève de Souscription).
+## Outputs
+Structured `TaskResult`. A `qualifier_lead` call returns `{ score: 0..1, decision: "qualifie"|"perdu" }`.
+`calculer_prime` returns `{ prime_annuelle_eur, base_eur, facteurs }` (indicative — the final rate falls under Underwriting).
 
-## Contrat de corrélation
-`correlation_id` propagé aux logs et à `memoire_agents`. Aucune écriture métier.
+## Correlation contract
+`correlation_id` propagated to logs and `memoire_agents`. No business writes.
 
-## Confidentialité
-Toutes les PII (email/téléphone issus de la prospection) sont anonymisées AVANT traitement LLM.
+## Confidentiality
+All PII (email/phone from prospecting) is anonymized BEFORE LLM processing.

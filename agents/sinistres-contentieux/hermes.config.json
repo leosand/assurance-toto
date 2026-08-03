@@ -1,6 +1,6 @@
 {
   "agent_name": "sinistres-contentieux",
-  "role": "Agent sinistres & contentieux — déclaration, estimation, négociation et recommandation de règlement.",
+  "role": "Claims & litigation agent — declaration, estimation, negotiation and settlement recommendation.",
   "model": "gemma4:e4b",
   "skills_dir": "/workspace/skills",
   "allowlist_path": "/home/hermes/mcp-allowlist.json",

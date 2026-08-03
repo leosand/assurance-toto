@@ -2,8 +2,8 @@ import pino, { type Logger } from 'pino';
 import type { HermesConfig } from './config.js';
 
 /**
- * Logger pino structuré : correlation_id, agent, action.
- * Jamais de contenu utilisateur brut (risque PII) dans les champs de log.
+ * Structured pino logger: correlation_id, agent, action.
+ * Never log raw user content (PII risk) in log fields.
  */
 export function makeLogger(cfg: HermesConfig): Logger {
   const logger = pino({

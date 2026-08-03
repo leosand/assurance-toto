@@ -1,14 +1,14 @@
 /**
- * Registre d'outils Hermes : schémas JSON rigides (énumérations string) exposés
- * au LLM local, et handlers qui LISENT la base (read-only) ou produisent une
- * COMMANDE CANDIDATE pour le bridge. Aucune écriture métier directe ici.
+ * Hermes tool registry: rigid JSON schemas (string enums) exposed to the
+ * local LLM, and handlers that READ the DB (read-only) or produce a CANDIDATE
+ * COMMAND for the bridge. No direct business writes here.
  *
- * RÈGLEMENT (brief §6B) : en dessous du seuil `HERMES_ESCALATION_THRESHOLD_EUR`
- * `recommander_reglement` produit une `candidateCommand` (claim.settlement.approve,
- * approved_by = npub de l'agent) postée au bridge (POST /commands) — le bridge
- * autorise alors le self-settlement d'un agent sinistres. Au-dessus du seuil,
- * l'agent ne s'auto-règle JAMAIS : il produit une `pendingApproval` postée au
- * bridge (POST /approvals → approbation 'en_attente' pour le CEO).
+ * SETTLEMENT (brief §6B): below the `HERMES_ESCALATION_THRESHOLD_EUR` threshold
+ * `recommander_reglement` produces a `candidateCommand` (claim.settlement.approve,
+ * approved_by = the agent's npub) posted to the bridge (POST /commands) — the
+ * bridge then authorizes self-settlement by a claims agent. Above the threshold,
+ * the agent NEVER self-settles: it produces a `pendingApproval` posted to the
+ * bridge (POST /approvals → 'en_attente' approval for the CEO).
  */
 import { randomInt, randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
@@ -17,21 +17,21 @@ import type { OllamaClient, OllamaTool } from '../llm/ollama.js';
 import type { BridgeCommand, ApprobationInput } from '../bridge/client.js';
 import { buildSettlementCommand } from '../bridge/client.js';
 
-/** Input d'escalade fourni par l'outil (correlation_id fixé par le runtime). */
+/** Escalation input provided by the tool (correlation_id set by the runtime). */
 export type BridgeApprobationInput = Omit<ApprobationInput, 'correlation_id'>;
 import type { Allowlist } from '../security/allowlist.js';
 import { isAllowed } from '../security/allowlist.js';
 import { assertNoPii, finalScrub, type Anonymizer } from '../privacy/anonymize.js';
 
-// ---------- types publics ----------
+// ---------- public types ----------
 
 export interface ToolExecution {
   tool: string;
   ok: boolean;
   result: unknown;
-  /** Commande typée prête à être POSTée au bridge (après kill-switch/anonymisation). */
+  /** Typed command ready to be POSTed to the bridge (after kill-switch/anonymization). */
   candidateCommand?: BridgeCommand;
-  /** Escalade CEO : demande d'approbation 'en_attente' à créer côté bridge (§6B). */
+  /** CEO escalation: 'en_attente' approval request to create on the bridge side (§6B). */
   pendingApproval?: BridgeApprobationInput;
 }
 
@@ -60,12 +60,12 @@ interface ToolDef {
   execute(args: Record<string, unknown>, deps: ToolDeps): Promise<ToolExecution>;
 }
 
-// ---------- validation d'arguments (chaînes sûres, jamais d'injection) ----------
+// ---------- argument validation (safe strings, never any injection) ----------
 
 function reqString(args: Record<string, unknown>, key: string, max = 200): string {
   const v = args[key];
   if (typeof v !== 'string' || v.trim().length === 0) {
-    throw new ToolArgumentError(`argument '${key}' manquant ou invalide`);
+    throw new ToolArgumentError(`argument '${key}' missing or invalid`);
   }
   return v.trim().slice(0, max);
 }
@@ -83,7 +83,7 @@ export class ToolArgumentError extends Error {
   }
 }
 
-// ---------- SQL read-only (conforme init.sql / schema_v2.sql) ----------
+// ---------- read-only SQL (matches init.sql / schema_v2.sql) ----------
 
 async function lireSinistre(deps: ToolDeps, claimRef: string): Promise<unknown> {
   const numeric = /^\d+$/.test(claimRef) ? Number(claimRef) : null;
@@ -135,7 +135,7 @@ async function lireContrat(deps: ToolDeps, contratRef: string): Promise<unknown>
   return { rows: r.rows, count: r.rowCount };
 }
 
-// ---------- logique tarifaire (grille officielle — cf. skills souscription) ----------
+// ---------- pricing logic (official grid — cf. subscription skills) ----------
 
 interface DonneesRisque {
   age_conducteur: number | null;
@@ -194,32 +194,32 @@ function grillePrime(dr: DonneesRisque): { prime: number; facteurs: Record<strin
 }
 
 function scoreDeRisque(dr: DonneesRisque): { score: number; facteurs: string[] } {
-  let score = 30; // socle
-  const raisons: string[] = [];
-  const add = (pts: number, raison: string): void => {
+  let score = 30; // base
+  const reasons: string[] = [];
+  const add = (pts: number, reason: string): void => {
     score += pts;
-    raisons.push(raison);
+    reasons.push(reason);
   };
 
   const age = dr.age_conducteur ?? 40;
-  if (age < 25) add(25, 'conducteur de moins de 25 ans');
-  else if (age > 65) add(10, 'conducteur de plus de 65 ans');
+  if (age < 25) add(25, 'driver under 25');
+  else if (age > 65) add(10, 'driver over 65');
 
   const bm = dr.bonus_malus ?? 1;
-  if (bm > 2.5) add(30, 'bonus-malus > 2.5 (profil atypique)');
-  else if (bm > 1.25) add(15, 'bonus-malus élevé');
-  else if (bm < 0.9) add(-10, 'bonus fidélité');
+  if (bm > 2.5) add(30, 'bonus-malus > 2.5 (atypical profile)');
+  else if (bm > 1.25) add(15, 'high bonus-malus');
+  else if (bm < 0.9) add(-10, 'loyalty bonus');
 
-  if (dr.type_vehicule === 'sportive') add(20, 'véhicule sportif');
+  if (dr.type_vehicule === 'sportive') add(20, 'sports vehicle');
   else if (dr.type_vehicule === 'suv') add(8, 'SUV');
 
-  if ((dr.age_vehicule ?? 0) > 10) add(7, 'véhicule de plus de 10 ans');
-  if (dr.zone === 'paris') add(10, 'zone Paris intra-muros');
+  if ((dr.age_vehicule ?? 0) > 10) add(7, 'vehicle over 10 years old');
+  if (dr.zone === 'paris') add(10, 'Paris city-center zone');
 
   const clamped = Math.min(Math.max(Math.round(score), 0), 100);
   return {
     score: clamped,
-    facteurs: raisons,
+    facteurs: reasons,
   };
 }
 
@@ -236,12 +236,12 @@ function qualificationLead(dr: DonneesRisque): { score: number; decision: string
   return { score: arr, decision: arr > 0.6 ? 'qualifie' : 'perdu' };
 }
 
-// ---------- registre ----------
+// ---------- registry ----------
 
 export interface ToolRegistry {
-  /** Schémas OpenAI-style filtrés par l'allowlist de l'agent. */
+  /** OpenAI-style schemas filtered by the agent's allowlist. */
   schemasFor(allowlist: Allowlist): OllamaTool[];
-  /** Exécute un outil nommé (allowlist déjà vérifiée par le runtime). */
+  /** Executes a named tool (allowlist already checked by the runtime). */
   execute(name: string, args: Record<string, unknown>): Promise<ToolExecution>;
   has(name: string): boolean;
   listNames(): string[];
@@ -271,10 +271,10 @@ function makeRegistry(): ToolDef[] {
   return [
     {
       name: 'lire_sinistre',
-      description: "Lit un sinistre par id (lecture seule).",
+      description: "Reads a claim/sinistre by id (read-only).",
       parameters: {
         type: 'object',
-        properties: { sinistre_id: { type: 'string', description: 'Identifiant du sinistre' } },
+        properties: { sinistre_id: { type: 'string', description: 'Claim/sinistre identifier' } },
         required: ['sinistre_id'],
         additionalProperties: false,
       },
@@ -285,10 +285,10 @@ function makeRegistry(): ToolDef[] {
     },
     {
       name: 'lire_client',
-      description: 'Lit un client par id ou email (lecture seule).',
+      description: 'Reads a client by id or email (read-only).',
       parameters: {
         type: 'object',
-        properties: { client_ref: { type: 'string', description: 'ID numérique ou email' } },
+        properties: { client_ref: { type: 'string', description: 'Numeric ID or email' } },
         required: ['client_ref'],
         additionalProperties: false,
       },
@@ -299,10 +299,10 @@ function makeRegistry(): ToolDef[] {
     },
     {
       name: 'lire_contrat',
-      description: 'Lit un contrat par id ou numéro (lecture seule).',
+      description: 'Reads a contract by id or number (read-only).',
       parameters: {
         type: 'object',
-        properties: { contrat_ref: { type: 'string', description: 'ID numérique ou numéro de contrat' } },
+        properties: { contrat_ref: { type: 'string', description: 'Numeric ID or contract number' } },
         required: ['contrat_ref'],
         additionalProperties: false,
       },
@@ -314,7 +314,7 @@ function makeRegistry(): ToolDef[] {
     {
       name: 'calculer_prime',
       description:
-        "Calcule la prime annuelle indicative selon la grille tarifaire officielle (bonus-malus, zone, formule, âge, véhicule).",
+        "Computes the indicative annual premium from the official rating grid (bonus-malus, zone, plan, age, vehicle).",
       parameters: {
         type: 'object',
         properties: { donnees_risque: RISQUE_PROPS },
@@ -335,7 +335,7 @@ function makeRegistry(): ToolDef[] {
     {
       name: 'evaluer_risque',
       description:
-        'Score de risque composite 0-100 pour la souscription. >80 = risque élevé (surprime ou refus).',
+        'Composite risk score 0-100 for underwriting. >80 = high risk (loading or refusal).',
       parameters: {
         type: 'object',
         properties: {
@@ -372,7 +372,7 @@ function makeRegistry(): ToolDef[] {
     {
       name: 'qualifier_lead',
       description:
-        "Score un lead sortant (0-1) selon la grille de qualification Sales. >0.6 = 'qualifie', sinon 'perdu'.",
+        "Scores an outbound lead (0-1) per the Sales qualification grid. >0.6 = 'qualifie', else 'perdu'.",
       parameters: {
         type: 'object',
         properties: {
@@ -400,13 +400,13 @@ function makeRegistry(): ToolDef[] {
     {
       name: 'recommander_reglement',
       description:
-        "Émet UNE RECOMMANDATION de règlement d'un sinistre. Ne règle rien : produit une commande candidate claim.settlement.approve envoyée au bridge (policy + approbation).",
+        "Emits ONE settlement RECOMMENDATION for a claim/sinistre. Settles nothing: produces a candidate claim.settlement.approve command sent to the bridge (policy + approval).",
       parameters: {
         type: 'object',
         properties: {
-          claim_id: { type: 'string', description: 'Identifiant du sinistre (claim)' },
-          montant: { type: 'number', description: 'Montant de règlement proposé en EUR (>0)' },
-          raison: { type: 'string', description: 'Justification métier (sans PII)' },
+          claim_id: { type: 'string', description: 'Claim/sinistre identifier' },
+          montant: { type: 'number', description: 'Proposed settlement amount in EUR (>0)' },
+          raison: { type: 'string', description: 'Business justification (no PII)' },
         },
         required: ['claim_id', 'montant', 'raison'],
         additionalProperties: false,
@@ -416,12 +416,12 @@ function makeRegistry(): ToolDef[] {
         const montant = optNumber(args, 'montant');
         const raison = reqString(args, 'raison', 500);
         if (montant === null || montant <= 0) {
-          throw new ToolArgumentError("'montant' doit être un nombre strictement positif");
+          throw new ToolArgumentError("'montant' must be a strictly positive number");
         }
         const escalade = montant > deps.escalationThresholdEur;
         if (escalade) {
-          // Au-dessus du seuil : JAMAIS d'auto-règlement. L'agent crée une demande
-          // d'approbation 'en_attente' pour le CEO (POST /approvals côté bridge).
+          // Above the threshold: NEVER self-settle. The agent creates a
+          // 'en_attente' approval request for the CEO (POST /approvals on the bridge).
           return {
             tool: 'recommander_reglement',
             ok: true,
@@ -448,7 +448,7 @@ function makeRegistry(): ToolDef[] {
           approved_by: deps.agentNpub,
         });
         if (command === null) {
-          throw new ToolArgumentError('commande claim.settlement.approve invalide');
+          throw new ToolArgumentError('invalid claim.settlement.approve command');
         }
         return {
           tool: 'recommander_reglement',
@@ -467,11 +467,11 @@ function makeRegistry(): ToolDef[] {
     {
       name: 'requeter_pnl',
       description:
-        "Lit le P&L (append-only, montants signés : recettes+/charges-). periode ' YYYY-MM' ou 'semaine' pour la vue hebdo.",
+        "Reads the P&L (append-only, signed amounts: revenue+/expenses-). periode 'YYYY-MM' or 'semaine' for the weekly view.",
       parameters: {
         type: 'object',
         properties: {
-          periode: { type: 'string', description: "'YYYY-MM' OU 'semaine' (vue hebdo)" },
+          periode: { type: 'string', description: "'YYYY-MM' OR 'semaine' (weekly view)" },
           kind: { type: 'string', enum: PERIODE_KIND },
         },
         required: ['periode'],
@@ -487,7 +487,7 @@ function makeRegistry(): ToolDef[] {
           return { tool: 'requeter_pnl', ok: true, result: { vue: 'v_pnl_hebdo', rows: r.rows } };
         }
         if (!/^\d{4}-\d{2}$/.test(periode)) {
-          throw new ToolArgumentError("periode doit être 'YYYY-MM' ou 'semaine'");
+          throw new ToolArgumentError("periode must be 'YYYY-MM' or 'semaine'");
         }
         const r = await deps.db.query(
           `SELECT departement, categorie, SUM(montant) AS montant, COUNT(*) AS lignes
@@ -503,12 +503,12 @@ function makeRegistry(): ToolDef[] {
     {
       name: 'consulter_memoire',
       description:
-        'Recherche sémantique (pgvector) dans la mémoire du département + mémoire partagée.',
+        'Semantic search (pgvector) in the department memory + shared memory.',
       parameters: {
         type: 'object',
         properties: {
-          requete: { type: 'string', description: 'Question / mots-clés de recherche' },
-          limite: { type: 'integer', description: 'Nb max de résultats (défaut 5)' },
+          requete: { type: 'string', description: 'Question / search keywords' },
+          limite: { type: 'integer', description: 'Max number of results (default 5)' },
         },
         required: ['requete'],
         additionalProperties: false,
@@ -522,7 +522,7 @@ function makeRegistry(): ToolDef[] {
           return {
             tool: 'consulter_memoire',
             ok: true,
-            result: { entries: [] as MemoireEntry[], note: 'embeddings indisponibles' },
+            result: { entries: [] as MemoireEntry[], note: 'embeddings unavailable' },
           };
         }
         const entries = await deps.db.searchMemoire(deps.departement, embedding, limite);
@@ -553,12 +553,12 @@ export function createToolRegistry(deps: ToolDeps): ToolRegistry {
     async execute(name: string, args: Record<string, unknown>): Promise<ToolExecution> {
       const def = byName.get(name);
       if (def === undefined) {
-        return { tool: name, ok: false, result: { error: `outil inconnu: ${name}` } };
+        return { tool: name, ok: false, result: { error: `unknown tool: ${name}` } };
       }
       try {
         return await def.execute(args, deps);
       } catch (err) {
-        const msg = err instanceof ToolArgumentError ? err.message : 'erreur interne outil';
+        const msg = err instanceof ToolArgumentError ? err.message : 'internal tool error';
         deps.logger.warn({ action: 'tool.error', tool: name }, msg);
         return { tool: name, ok: false, result: { error: msg } };
       }
@@ -569,7 +569,7 @@ export function createToolRegistry(deps: ToolDeps): ToolRegistry {
   };
 }
 
-/** ID aléatoire court (corrélation interne, pas le correlation_id global). */
+/** Short random ID (internal correlation, not the global correlation_id). */
 export function newLocalId(): string {
   return `${randomInt(1_000_000)}-${randomUUID().slice(0, 8)}`;
 }

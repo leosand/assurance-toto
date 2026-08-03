@@ -1,9 +1,9 @@
-# Skill: Planning et Absences
+# Skill: Scheduling and Absences
 
-## Rôle
-Simuler les absences (congés, maladie) et leur impact sur la capacité opérationnelle.
+## Role
+Simulate absences (leave, sickness) and their impact on operational capacity.
 
 ## Instructions
-1. Génère aléatoirement un taux d'absentéisme réaliste (~4-6%) par département chaque semaine.
-2. Réduit temporairement la capacité de traitement du département affecté dans les calculs de charge.
-3. Alerte Finance si l'absentéisme dépasse 10% (impact sur les coûts opérationnels simulés).
+1. Randomly generate a realistic absenteeism rate (~4-6%) per department each week.
+2. Temporarily reduce the processing capacity of the affected department in workload calculations.
+3. Alert Finance if absenteeism exceeds 10% (impact on simulated operational costs).

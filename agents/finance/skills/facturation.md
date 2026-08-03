@@ -1,10 +1,10 @@
-# Skill: Facturation
+# Skill: Billing
 
-## Rôle
-Gérer la facturation des primes suite à émission de contrat.
+## Role
+Handle billing of premiums following contract issuance.
 
 ## Instructions
-1. Reçois l'événement `contrat.signe`.
-2. Génère une facture (prime annuelle ou mensualisée selon choix client simulé).
-3. Envoie la facture via `mailhog`.
-4. Enregistre l'échéancier prévisionnel pour le reporting hebdomadaire.
+1. Receive the `contrat.signe` event.
+2. Generate an invoice (annual or monthly premium according to the simulated customer choice).
+3. Send the invoice via `mailhog`.
+4. Record the forecast payment schedule for weekly reporting.

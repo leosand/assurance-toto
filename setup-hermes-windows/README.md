@@ -1,80 +1,79 @@
-# 🖥️ Guide de Setup — Assurance Toto sur Windows 11 (Gemma 8B / Qwen2.5 7B)
+# 🖥️ Setup Guide — Assurance Toto on Windows 11 (Gemma 8B / Qwen2.5 7B)
 
-Ce dossier contient tout ce qu'il faut pour installer et lancer le jumeau numérique **Assurance Toto**
-sur un PC Windows 11 équipé de modèles locaux légers (Gemma 8B ou Qwen2.5 7B) et de VS Code / OpenCode.
+This folder contains everything needed to install and run the **Assurance Toto** digital twin
+on a Windows 11 PC equipped with lightweight local models (Gemma 8B or Qwen2.5 7B) and VS Code / OpenCode.
 
-> ⚠️ Ce dossier est complémentaire au projet principal (`assurance-toto-jumeau-numerique-COMPLET.zip`).
-> Il contient les fichiers de configuration adaptés à un matériel modeste (7-8B, pas de gros GPU), 
-> le guide d'installation pas-à-pas, et les scripts de diagnostic.
+> ⚠️ This folder complements the main project (`assurance-toto-jumeau-numerique-COMPLET.zip`).
+> It contains configuration files adapted to modest hardware (7-8B, no large GPU),
+> the step-by-step installation guide, and diagnostic scripts.
 
-## 📋 Contenu de ce dossier
+## 📋 Folder contents
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `INSTALL-WINDOWS11.md` | Guide d'installation complet pas-à-pas (WSL2, Docker, Ollama, VS Code) |
-| `CHANGELOG-SETUP.md` | Historique des versions de ce guide de setup |
-| `.env.lite.example` | Variables d'environnement pré-remplies pour Gemma 8B / Qwen2.5 7B |
-| `docker-compose.lite.yml` | Version allégée à 4 agents (Orchestrateur, Sales, Souscription, Sinistres) |
-| `TROUBLESHOOTING.md` | Erreurs fréquentes Windows/WSL2/Ollama/Hermes et leurs solutions |
-| `scripts/check-ram-vram.ps1` | Script PowerShell de vérification des ressources disponibles |
-| `scripts/ollama-context-test.ps1` | Test de tenue du contexte 64K avec ton modèle local |
-| `.vscode/settings.json` | Configuration VS Code recommandée (extension WSL, terminal par défaut) |
-| `.vscode/extensions.json` | Extensions VS Code recommandées |
+| `INSTALL-WINDOWS11.md` | Complete step-by-step installation guide (WSL2, Docker, Ollama, VS Code) |
+| `CHANGELOG-SETUP.md` | Version history of this setup guide |
+| `.env.lite.example` | Pre-filled environment variables for Gemma 8B / Qwen2.5 7B |
+| `docker-compose.lite.yml` | Lightweight 4-agent version (Orchestrator, Sales, Underwriting, Claims) |
+| `TROUBLESHOOTING.md` | Common Windows/WSL2/Ollama/Hermes errors and their solutions |
+| `scripts/check-ram-vram.ps1` | PowerShell script to check available resources |
+| `scripts/ollama-context-test.ps1` | 64K context endurance test with your local model |
+| `.vscode/settings.json` | Recommended VS Code configuration (WSL extension, default terminal) |
+| `.vscode/extensions.json` | Recommended VS Code extensions |
 
-## 🚀 Ordre d'utilisation recommandé
+## 🚀 Recommended usage order
 
-1. Lire `INSTALL-WINDOWS11.md` du début à la fin.
-2. Exécuter `scripts/check-ram-vram.ps1` pour valider que ta machine tient la charge.
-3. Copier `.env.lite.example` vers `.env` dans le dossier du projet principal, l'adapter.
-4. Remplacer `docker-compose.yml` du projet principal par `docker-compose.lite.yml` (ou fusionner).
-5. Exécuter `scripts/ollama-context-test.ps1` pour valider le contexte 64K avant de lancer Hermes.
-6. En cas de blocage, consulter `TROUBLESHOOTING.md`.
+1. Read `INSTALL-WINDOWS11.md` from start to finish.
+2. Run `scripts/check-ram-vram.ps1` to validate that your machine can handle the load.
+3. Copy `.env.lite.example` to `.env` in the main project folder, then adapt it.
+4. Replace the main project's `docker-compose.yml` with `docker-compose.lite.yml` (or merge them).
+5. Run `scripts/ollama-context-test.ps1` to validate the 64K context before launching Hermes.
+6. If you get stuck, check `TROUBLESHOOTING.md`.
 
-## 🧠 Rappel matériel minimum constaté
+## 🧠 Minimum observed hardware reminder
 
-| Modèle | RAM système recommandée | VRAM GPU (si dispo) | Contexte max tenable réaliste |
+| Model | Recommended system RAM | GPU VRAM (if available) | Realistic max context |
 |---|---|---|---|
-| Qwen2.5 7B (Q4_K_M) | 16 Go | 8 Go | 32K-48K tokens |
-| Gemma 8B (Q4_K_M) | 16 Go | 8-10 Go | 32K-48K tokens |
+| Qwen2.5 7B (Q4_K_M) | 16 GB | 8 GB | 32K-48K tokens |
+| Gemma 8B (Q4_K_M) | 16 GB | 8-10 GB | 32K-48K tokens |
 
-Hermes recommande 64K tokens de contexte minimum — sur un setup 7-8B/16 Go RAM, commence à 32K et augmente progressivement si stable.
+Hermes recommends a minimum 64K token context — on a 7-8B/16 GB RAM setup, start at 32K and increase gradually if stable.
 
-## **Supervision & Vue CEO**
+## **Supervision & CEO View**
 
-Si vous êtes CEO et souhaitez une vue d'ensemble rapide et opérationnelle :
+If you are a CEO and want a quick, operational overview:
 
-- **Accès aux interfaces web clés** :
-	- Gitea (code / dépôts) : http://localhost:3000
-	- Rocket.Chat (communication) : http://localhost:3001
-	- MailHog (emails envoyés par l'app) : http://localhost:8025
+- **Access to key web interfaces**:
+	- Gitea (code / repositories): http://localhost:3000
+	- Rocket.Chat (communication): http://localhost:3001
+	- MailHog (emails sent by the app): http://localhost:8025
 
-- **Vérifier l'état des services** (depuis la racine du projet) :
+- **Check service status** (from the project root):
 ```bash
 docker compose -f docker-compose.lite.yml ps
 ```
 
-- **Suivre les logs des agents en temps réel** :
+- **Follow agent logs in real time**:
 ```bash
 docker compose -f docker-compose.lite.yml logs -f agent-orchestrateur
 docker compose -f docker-compose.lite.yml logs -f agent-sales
 ```
 
-- **Redémarrer un agent si nécessaire** :
+- **Restart an agent if needed**:
 ```bash
 docker compose -f docker-compose.lite.yml restart agent-sales
 ```
 
-- **Ressources et performances** (aperçu) :
+- **Resources and performance** (overview):
 ```bash
 docker stats --no-stream
 ```
 
-- **Vérification de builds / images** :
+- **Build / image verification**:
 ```bash
 docker images | grep assurance-toto
 ```
 
-Notes rapides :
-- Les agents s'exécutent en mode headless (`hermes run --headless`). Leur comportement opérationnel (ex. décisions d'escalade) est enregistré dans les logs du conteneur. Pour audits et revue, exporter les logs ou configurer une intégration centralisée (ELK/Prometheus/Grafana) est recommandé.
-- J'ai ajouté un script d'aide `scripts/fix-docker-creds.sh` pour résoudre les erreurs de credential helpers lors du pull d'images.
-
+Quick notes:
+- Agents run in headless mode (`hermes run --headless`). Their operational behavior (e.g. escalation decisions) is recorded in the container logs. For audits and review, exporting logs or setting up a centralized integration (ELK/Prometheus/Grafana) is recommended.
+- I added a helper script `scripts/fix-docker-creds.sh` to resolve credential helper errors when pulling images.

@@ -1,23 +1,23 @@
-// Démo E2E complète des 13 critères — pilotée par scripts/demo/run-demo-e2e.sh
-// Ce module Node.js pilote les appels HTTP depuis l'hôte. Ne pas lancer directement
-// (utilisé par le script de démo). Voici la séquence réelle pilotée :
+// Full E2E demo of the 13 criteria — driven by scripts/demo/run-demo-e2e.sh
+// This Node.js module drives the HTTP calls from the host. Do not run directly
+// (used by the demo script). Here is the actual driven sequence:
 //
-// 1) healthcheck : bridge ready (pg+buzz)
+// 1) healthcheck: bridge ready (pg+buzz)
 // 2) seed scale-maison
-// 3) workflow A : lead fictif → contrat (seed) — mesuré dans le accent web écrire ici :
-//    * créer un sinistre montant ≤ 5000
-//    * l'exécuter via /commands (agent_sinusclaim_id=<id>) → exécuté immédiatement
-// 4) workflow B : sinistre montant > 5000 → créer approbation → CEO décide signé
-//    → règlement appliqué (plafond effectif : min(montant, 5000) si CEO, 5000 strict sinon)
-// 5) audit trail + correlation_id tracé
-// 6) dashboard rendu (montre ratio S/P)
-// 7) kill-switch CEO activé/désactivé (bloque/débloque autonomie)
-// 8) test anti-automation : texte libre refusé par JSON Schema (400 schema.invalid)
+// 3) workflow A: synthetic lead → contract (seed) — measured in the web accent, write here:
+//    * create a claim (sinistre) with amount ≤ 5000
+//    * execute it via /commands (agent_sinusclaim_id=<id>) → executed immediately
+// 4) workflow B: claim amount > 5000 → create approval → signed CEO decision
+//    → claim settlement applied (effective cap: min(amount, 5000) if CEO, 5000 strictly otherwise)
+// 5) audit trail + correlation_id traced
+// 6) dashboard rendered (shows claims/premiums ratio)
+// 7) CEO kill-switch enabled/disabled (blocks/unblocks autonomy)
+// 8) anti-automation test: free text rejected by JSON Schema (400 schema.invalid)
 //
-// Critères du brief (§11) :
-// 1✓ compose up 2✓ buzz local (:3002) 3✓ identités agents (4 x npub distincts)
-// 4✓ lead→contrat (seed) 5✓ sinistre ouvert→réglé 6✓ règlement>seuil crée approbation
-// 7✓ CEO signé déclenche workflow 8✓ rapport P&L (v_pnl_hebdo) 9✓ correlation_id
-// 10✓ PII synthétique par défaut, Presidio enforced 11✓ kill-switch 12✓ GitHub dépôt 13✓ aucune API prédite
+// Brief criteria (§11):
+// 1✓ compose up 2✓ local Buzz (:3002) 3✓ agent identities (4 x distinct npubs)
+// 4✓ lead→contract (seed) 5✓ claim opened→settled 6✓ settlement>threshold creates approval
+// 7✓ signed CEO triggers workflow 8✓ P&L report (v_pnl_hebdo) 9✓ correlation_id
+// 10✓ synthetic PII by default, Presidio enforced 11✓ kill-switch 12✓ GitHub repo 13✓ no predicted API
 
-console.log('[demo] voir scripts/demo/run-demo-e2e.sh pour lancement orchestré');
+console.log('[demo] see scripts/demo/run-demo-e2e.sh for orchestrated launch');

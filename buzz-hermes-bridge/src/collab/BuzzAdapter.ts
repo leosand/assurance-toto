@@ -8,7 +8,7 @@ import type { CollabAdapter, CollabHealth, InboundCommand } from './CollabAdapte
 import { NullCollabAdapter } from './CollabAdapter.js';
 import { parseSecretKey } from '../identity/keys.js';
 
-// Injection WS obligatoire côté Node pour les souscriptions SimplePool éventuelles.
+// Mandatory WS injection on Node for potential SimplePool subscriptions.
 useWebSocketImplementation(WebSocket);
 
 const KIND_TEXT_NOTE_CHANNEL = 9;
@@ -20,7 +20,7 @@ interface RelayPostResponse {
   message?: string;
 }
 
-/** Buzz relay expose une API REST en plus du WS (docs + facts vérifiés). */
+/** The Buzz relay exposes a REST API in addition to WS (docs + verified facts). */
 export class BuzzAdapter implements CollabAdapter {
   private readonly cfg: BridgeConfig;
   private readonly sk: Uint8Array;
@@ -69,8 +69,8 @@ export class BuzzAdapter implements CollabAdapter {
   }
 
   async postMessage(channelUuid: string, text: string, correlationId: string): Promise<{ eventId: string }> {
-    // Canal Buzz = event kind 9, tag h = uuid lowercase, content limite 64 KiB.
-    if (text.length > 64 * 1024) throw new Error('message trop long (>64 KiB)');
+    // Buzz channel = kind 9 event, tag h = lowercase uuid, content capped at 64 KiB.
+    if (text.length > 64 * 1024) throw new Error('message too long (>64 KiB)');
     const unsigned = {
       kind: KIND_TEXT_NOTE_CHANNEL,
       created_at: Math.floor(Date.now() / 1000),
@@ -100,7 +100,7 @@ export class BuzzAdapter implements CollabAdapter {
   }
 
   async ensureChannel(_channelUuid: string, _label?: string): Promise<{ ok: boolean }> {
-    // Buzz crée les channels à la volée sur le premier kind 9 ; rien à faire.
+    // Buzz creates channels on the fly on the first kind-9 event; nothing to do.
     return { ok: true };
   }
 
@@ -113,10 +113,10 @@ export class BuzzAdapter implements CollabAdapter {
     }
   }
 
-  /** Subscription WS optionnelle (NIP-01 wire + NIP-42 auth) — non bloquante au démarrage. */
+  /** Optional WS subscription (NIP-01 wire + NIP-42 auth) — non-blocking at startup. */
   async subscribeChannel(_channelUuid: string, _onEv: (cmd: InboundCommand) => void): Promise<() => void> {
-    // Hors scope du checkpoint: fetchCommands polling REST suffit à la corrélation.
-    // Si nécessaire, brancher ici SimplePool + relay.auth() (NIP-42) avec nostr-tools.
+    // Out of checkpoint scope: fetchCommands REST polling is enough for correlation.
+    // If needed, wire SimplePool + relay.auth() (NIP-42) with nostr-tools here.
     return () => undefined;
   }
 }
@@ -125,7 +125,7 @@ function sha256Hex(input: string): string {
   return createHash('sha256').update(input, 'utf8').digest('hex');
 }
 
-/** Convertit un event kind 9 relay en InboundCommand typé. */
+/** Converts a relay kind-9 event into a typed InboundCommand. */
 function parseInboundEvent(raw: unknown): InboundCommand | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const ev = raw as Record<string, unknown>;
@@ -140,14 +140,14 @@ function parseInboundEvent(raw: unknown): InboundCommand | null {
   if (typeof content !== 'string' || !Array.isArray(tags)) return null;
   const hTag = (tags as unknown[]).find((t) => Array.isArray(t) && t[0] === 'h' && typeof t[1] === 'string');
   if (!Array.isArray(hTag) || typeof hTag[1] !== 'string') return null;
-  // Vérification NIP-01 de la signature, si l'événement est complet.
+  // NIP-01 signature verification, if the event is complete.
   try {
     const candidate = { id, pubkey, sig: String(ev['sig'] ?? ''), created_at: createdAt, kind, tags: tags as string[][], content } as VerifiedEvent;
     if (!verifyEvent(candidate)) return null;
   } catch {
     return null;
   }
-  // Content Buzz = JSON {correlation_id, text} OU texte libre. On extrait le texte.
+  // Buzz content = JSON {correlation_id, text} OR free text. We extract the text.
   let text: string;
   try {
     const parsed = JSON.parse(content) as { correlation_id?: unknown; text?: unknown };
@@ -158,7 +158,7 @@ function parseInboundEvent(raw: unknown): InboundCommand | null {
   return { eventId: id, channelUuid: String(hTag[1]).toLowerCase(), authorPubkey: pubkey, text, createdAt };
 }
 
-/** Factory : BuzzAdapter si BUZZ_PRIVATE_KEY+BUZZ_RELAY_URL set, sinon Null. */
+/** Factory: BuzzAdapter if BUZZ_PRIVATE_KEY+BUZZ_RELAY_URL are set, otherwise Null. */
 export function makeCollabAdapter(cfg: BridgeConfig): CollabAdapter {
   if (cfg.buzzPrivateKey !== undefined && cfg.buzzRelayUrl.length > 0) {
     return new BuzzAdapter(cfg, cfg.buzzPrivateKey);

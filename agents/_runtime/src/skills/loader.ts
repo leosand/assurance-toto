@@ -1,12 +1,12 @@
 /**
- * Chargeur de skills : fichiers `*.md` dans SKILLS_DIR.
+ * Skills loader: `*.md` files in SKILLS_DIR.
  *
- * Format : frontmatter YAML minimal entre `---` (clés simples `nom: valeur`,
- * listes en ligne `[a, b]` ou à puces) puis le corps = instruction injectée
- * dans le prompt système. Le parsing est volontairement simple et robuste :
- * un skill mal formé est ignoré avec un warn, jamais un crash au démarrage.
+ * Format: minimal YAML frontmatter between `---` (simple `name: value` keys,
+ * inline lists `[a, b]` or bullet lists) then the body = instruction injected
+ * into the system prompt. Parsing is intentionally simple and robust:
+ * a malformed skill is skipped with a warn, never a startup crash.
  *
- * Placeholders `${NOM_ENV}` remplacés depuis process.env.
+ * `${ENV_NAME}` placeholders are replaced from process.env.
  */
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -15,9 +15,9 @@ import type { Logger } from 'pino';
 export interface Skill {
   name: string;
   description: string;
-  /** Corps du skill (instructions métier) injecté dans le prompt système. */
+  /** Skill body (business instructions) injected into the system prompt. */
   systemTemplate: string;
-  /** Outils Hermes que ce skill est censé mobiliser (informatif). */
+  /** Hermes tools this skill is expected to use (informational). */
   toolsAllowed: string[];
 }
 
@@ -58,7 +58,7 @@ export function parseSkillMarkdown(raw: string): ParsedFrontmatter {
       const key = kv[1] as string;
       const value = (kv[2] ?? '').trim();
       if (value === '') {
-        // Peut être le début d'une liste à puces.
+        // May be the start of a bullet list.
         listKey = key;
         data[key] = [];
       } else if (value.startsWith('[')) {
@@ -102,13 +102,13 @@ function interpolateEnv(text: string): string {
   return text.replace(/\$\{([A-Z0-9_]+)\}/g, (_m, name: string) => process.env[name] ?? '');
 }
 
-/** Charge tous les skills d'un répertoire. Répertoire absent/fichier illisible → ignoré. */
+/** Loads all skills from a directory. Missing dir/unreadable file → skipped. */
 export async function loadSkills(dir: string, logger: Logger): Promise<Skill[]> {
   let files: string[];
   try {
     files = (await readdir(dir)).filter((f) => f.toLowerCase().endsWith('.md'));
   } catch {
-    logger.warn({ action: 'skills.dir_missing', dir }, 'SKILLS_DIR introuvable — aucun skill chargé');
+    logger.warn({ action: 'skills.dir_missing', dir }, 'SKILLS_DIR not found — no skill loaded');
     return [];
   }
   const skills: Skill[] = [];
@@ -117,9 +117,9 @@ export async function loadSkills(dir: string, logger: Logger): Promise<Skill[]> 
       const raw = interpolateEnv(await readFile(join(dir, f), 'utf8'));
       skills.push(toSkill(f, parseSkillMarkdown(raw)));
     } catch {
-      logger.warn({ action: 'skills.unreadable', file: f }, 'skill illisible — ignoré');
+      logger.warn({ action: 'skills.unreadable', file: f }, 'unreadable skill — skipped');
     }
   }
-  logger.info({ action: 'skills.loaded', count: skills.length, dir }, 'skills chargés');
+  logger.info({ action: 'skills.loaded', count: skills.length, dir }, 'skills loaded');
   return skills;
 }

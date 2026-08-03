@@ -1,5 +1,5 @@
 /**
- * Test 4 : kill-switch actif → l'action autonome est refusée proprement.
+ * Test 4: kill-switch active → the autonomous action is cleanly denied.
  * Couvre aussi le cache du kill-switch (fail-closed sur erreur de lecture).
  */
 import { describe, it, expect } from 'vitest';
@@ -7,7 +7,7 @@ import { makeHarness, makeMemoryDb, silentLogger } from './helpers.js';
 import { KillSwitch } from '../src/security/killswitch.js';
 
 describe('kill-switch', () => {
-  it('actif → runTask refusé, aucun tool call, aucun POST bridge', async () => {
+  it('active → runTask denied, no tool call, no bridge POST', async () => {
     const { agent, posted, memoire } = makeHarness({
       role: 'sinistres-contentieux',
       tools: ['recommander_reglement'],
@@ -35,15 +35,15 @@ describe('kill-switch', () => {
     expect(memoire).toHaveLength(0); // pas d'apprentissage
   });
 
-  it('fail-closed : erreur de lecture sans cache → considéré actif', async () => {
+  it('fail-closed: read error without cache → considered active', async () => {
     const { db } = makeMemoryDb({ killSwitchActive: false });
-    // Sabote la lecture : throw systématique.
+    // Sabotage the read: systematic throw.
     db.query = () => Promise.reject(new Error('pg down'));
     const ks = new KillSwitch(db, silentLogger());
     expect(await ks.isActive()).toBe(true);
   });
 
-  it("le cache borne le polling à 2s", async () => {
+  it("the cache bounds polling to 2s", async () => {
     let reads = 0;
     const { db } = makeMemoryDb({ killSwitchActive: false });
     const baseQuery = db.query.bind(db);
@@ -56,9 +56,9 @@ describe('kill-switch', () => {
 
     expect(await ks.isActive()).toBe(false);
     expect(await ks.isActive()).toBe(false);
-    expect(reads).toBe(1); // servi depuis le cache
+    expect(reads).toBe(1); // served from cache
 
-    fakeNow += 2_500; // cache expiré (> 2s)
+    fakeNow += 2_500; // cache expired (> 2s)
     expect(await ks.isActive()).toBe(false);
     expect(reads).toBe(2);
   });

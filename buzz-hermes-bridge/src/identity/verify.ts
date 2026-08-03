@@ -1,6 +1,6 @@
 /**
- * Vérification NIP-01 d'un event signé fourni par l'appelant (POST /commands).
- * Empêche un tiers de soumettre une commande au nom du CEO sans posséder la clé.
+ * NIP-01 verification of a signed event provided by the caller (POST /commands).
+ * Prevents a third party from submitting a command on behalf of the CEO without owning the key.
  */
 import { verifyEvent } from 'nostr-tools/pure';
 import type { VerifiedEvent } from 'nostr-tools/pure';
@@ -28,11 +28,11 @@ export interface SigVerifyFail {
 }
 
 export function verifySignedEventForCommand(ev: SignedEventInput, cmd: Command): SigVerifyOk | SigVerifyFail {
-  // Kind attendu côté Buzz channel = 9 (message de channel NIP-01).
+  // Expected kind on the Buzz channel = 9 (NIP-01 channel message).
   if (typeof ev.kind !== 'number' || ev.kind !== 9) {
     return { ok: false, reason: `kind.invalide:${String(ev.kind)} (attendu 9)` };
   }
-  // Content de l'event doit sérialiser exactement la même commande (pas de mismatch).
+  // Event content must serialize exactly the same command (no mismatch).
   let contentCmd: unknown;
   try {
     contentCmd = JSON.parse(ev.content);
@@ -42,7 +42,7 @@ export function verifySignedEventForCommand(ev: SignedEventInput, cmd: Command):
   if (!sameCommand(contentCmd, cmd)) {
     return { ok: false, reason: 'content.mismatch:commande_event_non_identique' };
   }
-  // Vérification cryptographique NIP-01 (id + sig Schnorr).
+  // NIP-01 cryptographic verification (id + Schnorr sig).
   try {
     if (!verifyEvent(ev as VerifiedEvent)) {
       return { ok: false, reason: 'signature.nostr_invalide' };
@@ -61,7 +61,7 @@ export function authorNpubHex(author: string): string {
   }
 }
 
-/** Égalité structurelle stricte entre deux représentations de commande. */
+/** Strict structural equality between two command representations. */
 export function sameCommand(a: unknown, b: unknown): boolean {
   return canonical(a) === canonical(b);
 }

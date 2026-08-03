@@ -1,16 +1,16 @@
 ---
 name: escalade-juridique
-description: Gère les cas de contentieux qui dépassent les capacités de négociation standard.
+description: Handles litigation cases that exceed standard negotiation capabilities.
 tools: [recommander_reglement, lire_sinistre, consulter_memoire]
 ---
 
-# Skill: Escalade Juridique
+# Skill: Legal Escalation
 
-## Rôle
-Gérer les cas de contentieux qui dépassent les capacités de négociation standard.
+## Role
+Handle litigation cases that exceed standard negotiation capabilities.
 
 ## Instructions
-1. Si la partie adverse refuse toute négociation après 3 échanges, ou si la responsabilité est juridiquement contestée, recommande une escalade immédiate au CEO.
-2. Prépare un dossier de synthèse (faits, montants en jeu, historique des échanges) — texte structuré, données anonymisées.
-3. Attends la validation CEO (via approbation bridge) AVANT tout engagement de procédure.
-4. Documente la situation dans la mémoire pour traçabilité.
+1. If the opposing party refuses any negotiation after 3 exchanges, or if liability is legally contested, recommend an immediate escalation to the CEO.
+2. Prepare a summary file (facts, amounts at stake, exchange history) — structured text, anonymized data.
+3. Wait for CEO validation (via bridge approval) BEFORE any commitment to proceedings.
+4. Document the situation in memory for traceability.

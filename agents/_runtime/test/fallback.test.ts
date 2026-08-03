@@ -1,36 +1,36 @@
 /**
- * Test 6 : le LLM n'émet aucun tool call (texte libre) → fallback structuré gracieux,
- * aucun crash, aucun POST bridge, apprentissage mémoire quand même écrit.
+ * Test 6: the LLM emits no tool call (free text) → graceful structured fallback,
+ * no crash, no bridge POST, memory learning written anyway.
  */
 import { describe, it, expect } from 'vitest';
 import { makeHarness } from './helpers.js';
 
-describe('fallback structuré sans tool calls', () => {
-  it('aucun tool_calls → TaskResult propre avec fallbackText, pas de crash', async () => {
+describe('structured fallback without tool calls', () => {
+  it('no tool_calls → clean TaskResult with fallbackText, no crash', async () => {
     const { agent, posted, memoire } = makeHarness({
       role: 'sales',
       tools: ['qualifier_lead'],
-      chatResponses: [{ toolCalls: [], text: 'Aucune action pertinente pour cette tâche.' }],
+      chatResponses: [{ toolCalls: [], text: 'No relevant action for this task.' }],
     });
 
     const result = await agent.runTask({
-      title: 'Question générale',
-      description: 'Quel est le plafond d’escalade ?',
+      title: 'General question',
+      description: 'What is the escalation cap?',
     });
 
     expect(result.stoppedByKillSwitch).toBe(false);
     expect(result.toolCalls).toHaveLength(0);
-    expect(result.fallbackText).toBe('Aucune action pertinente pour cette tâche.');
+    expect(result.fallbackText).toBe('No relevant action for this task.');
     expect(result.summary).toMatch(/fallback/i);
     expect(result.command).toBeUndefined();
     expect(posted).toHaveLength(0);
-    // L'apprentissage est écrit (mémoire_agents) même sans outil.
+    // Learning is written (memoire_agents) even without a tool.
     expect(memoire).toHaveLength(1);
     expect(memoire[0]?.nature).toBe('apprentissage_tache');
     expect(memoire[0]?.departement).toBe('sales');
   });
 
-  it('texte vide ET aucun tool call → toujours pas de crash', async () => {
+  it('empty text AND no tool call → still no crash', async () => {
     const { agent } = makeHarness({
       role: 'orchestrateur',
       tools: ['requeter_pnl'],

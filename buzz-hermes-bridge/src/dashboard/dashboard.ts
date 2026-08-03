@@ -1,21 +1,21 @@
 /**
- * Cockpit CEO (ADR-002, option cockpit lean) : page HTML auto-suffisante
- * rendue côté serveur, 100 % lecture seule sur Postgres via le Repository.
- * Aucune dépendance front, aucun CDN : CSS inline + barres CSS générées ici,
- * pour rester utilisable en démo sans réseau.
+ * CEO cockpit (ADR-002, lean cockpit option): self-contained HTML page
+ * rendered server-side, 100% read-only on Postgres via the Repository.
+ * No front dependency, no CDN: inline CSS + CSS bars generated here,
+ * to stay usable in demo without network.
  *
- * Chaque section rapporte sa fraîcheur (MAX(created_at) des données sources)
- * et, en cas d'erreur de sa requête, s'affiche « indisponible » au lieu de 500.
+ * Each section reports its freshness (MAX(created_at) of the source data)
+ * and, on its own query error, shows “ unavailable ” instead of a 500.
  */
 import type { DashboardSnapshot, PnlWeeklyRow } from '../db/repository.js';
 
 export interface DashboardParams {
   snapshot: () => Promise<DashboardSnapshot>;
-  /** npub/hex CEO injecté dans les formulaires (whitelist vérifiée côté POST). */
+  /** CEO npub/hex injected into forms (whitelist verified on POST). */
   ceoPubkey: string;
-  /** correlation_id à surligner (paramètre ?correlation_id=). */
+  /** correlation_id to highlight (?correlation_id= parameter). */
   highlight?: string;
-  /** Message affiché après une action (ex. ?decided=12345). */
+  /** Message displayed after an action (e.g. ?decided=12345). */
   notice?: string;
   generatedAt?: Date;
 }
@@ -40,8 +40,8 @@ const cls = (n: number): string => (n > 0 ? 'good' : n < 0 ? 'bad' : 'muted');
 
 const UNAVAILABLE = `
   <div class="unavailable">
-    <strong>Section indisponible</strong>
-    <p>La source de données n'a pas répondu. Le reste du cockpit reste consultable.</p>
+    <strong>Section unavailable</strong>
+    <p>The data source did not respond. The rest of the cockpit remains viewable.</p>
   </div>`;
 
 async function section<T>(load: () => Promise<T>, renderFn: (d: T) => string): Promise<string> {
@@ -53,24 +53,24 @@ async function section<T>(load: () => Promise<T>, renderFn: (d: T) => string): P
 }
 
 function freshness(latest: string | null): string {
-  return `<span class="freshness">fraîcheur : ${esc(fmtDate(latest))}</span>`;
+  return `<span class="freshness">Data as of ${esc(fmtDate(latest))}</span>`;
 }
 
 function card(titre: string, inner: string): string {
   return `<section class="card"><div class="card-head"><h2>${titre}</h2></div>${inner}</section>`;
 }
 
-/** Barres de tendance CSS-only : dernières semaines, résultat net agrégé. */
+/** CSS-only trend bars: recent weeks, aggregated net result. */
 function trendBars(rows: PnlWeeklyRow[]): string {
   const weeks = new Map<string, number>();
   for (const r of rows) weeks.set(r.semaine_iso, (weeks.get(r.semaine_iso) ?? 0) + r.resultat_net);
   const series = [...weeks.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-8);
-  if (series.length === 0) return '<p class="muted">Aucune écriture P&amp;L hebdomadaire.</p>';
+  if (series.length === 0) return '<p class="muted">No weekly P&amp;L entry.</p>';
   const maxAbs = Math.max(...series.map(([, v]) => Math.abs(v)), 1);
   const bars = series
     .map(([week, v]) => {
       const h = Math.round((Math.abs(v) / maxAbs) * 100);
-      const label = esc(week.slice(5)); // MM-JJ
+      const label = esc(week.slice(5)); // MM-DD
       return `<div class="bar-col" title="${esc(week)} : ${esc(fmtEur(v))}">
         <div class="bar-wrap"><div class="bar ${signed(v)}" style="height:${Math.max(h, 3)}%"></div></div>
         <div class="bar-label mono">${label}</div>
@@ -132,7 +132,7 @@ export async function renderDashboard(p: DashboardParams): Promise<string> {
   const generatedAt = p.generatedAt ?? new Date();
   const hl = p.highlight ?? '';
 
-  // Une seule passe de lecture ; une section en échec n'emporte pas les autres.
+  // Single read pass: a failing section does not take the others down.
   const snap = await p.snapshot().catch(() => null);
   const failFast = UNAVAILABLE;
 
@@ -140,7 +140,7 @@ export async function renderDashboard(p: DashboardParams): Promise<string> {
   const pnlSection = snap === null ? failFast : await section(
     () => Promise.resolve(snap),
     (s) => {
-      // Résultat net hebdo toutes directions : Σ de la semaine la plus récente.
+      // Weekly net result across all directions: Σ of the most recent week.
       const byWeek = new Map<string, number>();
       for (const r of s.pnlHebdo) byWeek.set(r.semaine_iso, (byWeek.get(r.semaine_iso) ?? 0) + r.resultat_net);
       const recentWeeks = [...byWeek.entries()].filter(([w]) => w !== 'n-d').sort((a, b) => b[0].localeCompare(a[0]));
@@ -150,10 +150,10 @@ export async function renderDashboard(p: DashboardParams): Promise<string> {
         .join('');
       return card('P&amp;L', `
         <div class="kpis">
-          <div class="kpi"><div class="v ${cls(s.pnl.resultat_cumule)}">${esc(fmtEur(s.pnl.resultat_cumule))}</div><div class="l">Résultat net cumulé (${s.pnl.nb_ecritures} écritures)</div></div>
-          ${lastWeek === null ? '' : `<div class="kpi"><div class="v ${cls(lastWeek)}">${esc(fmtEur(lastWeek))}</div><div class="l">Résultat net — dernière semaine (tous départements)</div></div>`}
+          <div class="kpi"><div class="v ${cls(s.pnl.resultat_cumule)}">${esc(fmtEur(s.pnl.resultat_cumule))}</div><div class="l">Cumulative net result (${s.pnl.nb_ecritures} entries)</div></div>
+          ${lastWeek === null ? '' : `<div class="kpi"><div class="v ${cls(lastWeek)}">${esc(fmtEur(lastWeek))}</div><div class="l">Net result — last week (all departments)</div></div>`}
         </div>
-        ${ratioRows === '' ? '<p class="muted">Aucun ratio de sinistralité.</p>' : `<table><thead><tr><th>Département</th><th>Ratio sinistres/primes</th></tr></thead><tbody>${ratioRows}</tbody></table>`}
+        ${ratioRows === '' ? '<p class="muted">No claims-to-premiums ratio.</p>' : `<table><thead><tr><th>Department</th><th>Claims-to-premiums ratio</th></tr></thead><tbody>${ratioRows}</tbody></table>`}
         ${trendBars(s.pnlHebdo)}
         ${freshness(s.pnl.latest)}
       `);
@@ -167,12 +167,12 @@ export async function renderDashboard(p: DashboardParams): Promise<string> {
       const conv = s.pipeline.contrats > 0 || s.pipeline.clients > 0
         ? (s.pipeline.clients > 0 ? ((s.pipeline.contrats / s.pipeline.clients) * 100).toFixed(1) + ' %' : 'n-d')
         : 'n-d';
-      return card('Pipeline commercial', `
+      return card('Sales pipeline', `
         <div class="kpis">
           <div class="kpi"><div class="v">${s.pipeline.clients}</div><div class="l">Clients</div></div>
-          <div class="kpi"><div class="v">${s.pipeline.contrats}</div><div class="l">Contrats</div></div>
-          <div class="kpi"><div class="v">${esc(conv)}</div><div class="l">Contrats / client</div></div>
-          <div class="kpi"><div class="v muted">n-d</div><div class="l">Leads (non dérivable du schéma actuel)</div></div>
+          <div class="kpi"><div class="v">${s.pipeline.contrats}</div><div class="l">Policies</div></div>
+          <div class="kpi"><div class="v">${esc(conv)}</div><div class="l">Policies / client</div></div>
+          <div class="kpi"><div class="v muted">n-d</div><div class="l">Leads (not derivable from current schema)</div></div>
         </div>
         ${freshness(s.pipeline.latest)}
       `);
@@ -190,18 +190,18 @@ export async function renderDashboard(p: DashboardParams): Promise<string> {
       const bodyRows = rows
         .map((r) => `<tr><td><span class="pill">${esc(r.statut)}</span></td><td class="mono">${r.nb}</td><td class="mono">${esc(fmtEur(r.montant))}</td></tr>`)
         .join('');
-      return card('Sinistres', `
+      return card('Claims', `
         <div class="kpis">
-          <div class="kpi"><div class="v">${esc(fmtEur(totalProvisionne))}</div><div class="l">Provisionné (ouvert/en cours/contentieux)</div></div>
-          <div class="kpi"><div class="v">${esc(fmtEur(totalRegle))}</div><div class="l">Réglé</div></div>
+          <div class="kpi"><div class="v">${esc(fmtEur(totalProvisionne))}</div><div class="l">Provisioned (open/in progress/disputed)</div></div>
+          <div class="kpi"><div class="v">${esc(fmtEur(totalRegle))}</div><div class="l">Settled</div></div>
         </div>
-        ${bodyRows === '' ? '<p class="muted">Aucun sinistre en base.</p>' : `<table><thead><tr><th>Statut</th><th>Nb</th><th>Montant</th></tr></thead><tbody>${bodyRows}</tbody></table>`}
+        ${bodyRows === '' ? '<p class="muted">No claims in the database.</p>' : `<table><thead><tr><th>Status</th><th>Qty</th><th>Amount</th></tr></thead><tbody>${bodyRows}</tbody></table>`}
         ${freshness(s.sinistres.latest)}
       `);
     },
   );
 
-  // --- Approbations CEO ---
+  // --- CEO approvals ---
   const approSection = snap === null ? failFast : await section(
     () => Promise.resolve(snap),
     (s) => {
@@ -216,32 +216,32 @@ export async function renderDashboard(p: DashboardParams): Promise<string> {
           <td>
             <form class="inline" method="post" action="/approvals/${esc(a.correlation_id)}/decide">
               <input type="hidden" name="decided_by" value="${esc(p.ceoPubkey)}">
-              <input type="hidden" name="reason" value="decision CEO via cockpit (démo)">
-              <button type="submit" name="approve" value="true">Approuver</button>
-              <button class="refuse" type="submit" name="approve" value="false">Refuser</button>
+              <input type="hidden" name="reason" value="CEO decision via cockpit (demo)">
+              <button type="submit" name="approve" value="true">Approve</button>
+              <button class="refuse" type="submit" name="approve" value="false">Reject</button>
             </form>
           </td>
         </tr>`;
       }).join('');
-      return card('Approbations CEO', `
-        <div class="kpis"><div class="kpi"><div class="count-big ${s.approbationsEnAttente.length > 0 ? 'bad' : 'good'}">${s.approbationsEnAttente.length}</div><div class="l">en attente</div></div></div>
-        ${rows === '' ? '<p class="muted">Aucune demande en attente.</p>' : `<div class="scroll"><table><thead><tr><th>correlation_id</th><th>Type</th><th>Claim</th><th>Montant</th><th>Demandeur</th><th>Décision</th></tr></thead><tbody>${rows}</tbody></table></div>`}
-        <p class="muted">Surface de décision DÉMO — en production, chaque décision doit être signée Nostr (event kind 9 vérifié par l'endpoint).</p>
+      return card('Pending CEO approvals', `
+        <div class="kpis"><div class="kpi"><div class="count-big ${s.approbationsEnAttente.length > 0 ? 'bad' : 'good'}">${s.approbationsEnAttente.length}</div><div class="l">pending</div></div></div>
+        ${rows === '' ? '<p class="muted">No pending requests.</p>' : `<div class="scroll"><table><thead><tr><th>correlation_id</th><th>Type</th><th>Claim</th><th>Amount</th><th>Requester</th><th>Decision</th></tr></thead><tbody>${rows}</tbody></table></div>`}
+        <p class="muted">DEMO decision surface — in production, each decision must be Nostr-signed (kind 9 event verified by the endpoint).</p>
         ${freshness(s.approbationsEnAttente[0]?.created_at ?? null)}
       `);
     },
   );
 
-  // --- Conformité / macro ---
+  // --- Compliance / macro ---
   const conformiteSection = snap === null ? failFast : await section(
     () => Promise.resolve(snap),
     (s) => {
       const macroRows = s.macro
         .map((m) => `<tr><td>${esc(m.indicateur)}</td><td class="mono">${m.valeur === null ? 'n-d' : String(m.valeur)}</td><td>${esc(m.periode ?? '—')}</td><td>${esc(m.source ?? '—')}</td></tr>`)
         .join('');
-      return card('Conformité &amp; contexte macro', `
-        <p>${s.anonymisation.tracked ? `<strong>${s.anonymisation.count}</strong> événement(s) d'audit référençant l'anonymisation (pseudo-anonymisation avant stockage, principe RGPD appliqué aux payloads).` : `Traçabilité d'anonymisation non dénombrable sur ce schéma — principe appliqué : pseudo-anonymisation avant stockage (RGPD).`}</p>
-        ${macroRows === '' ? '<p class="muted">Aucun macro-indicateur.</p>' : `<table><thead><tr><th>Indicateur</th><th>Valeur</th><th>Période</th><th>Source</th></tr></thead><tbody>${macroRows}</tbody></table>`}
+      return card('Compliance &amp; macro context', `
+        <p>${s.anonymisation.tracked ? `<strong>${s.anonymisation.count}</strong> anonymization event(s) traced (pseudo-anonymization before storage, GDPR principle applied to payloads).` : `Anonymization traceability not countable on this schema — applied principle: pseudo-anonymization before storage (GDPR).`}</p>
+        ${macroRows === '' ? '<p class="muted">No macro indicator.</p>' : `<table><thead><tr><th>Indicator</th><th>Value</th><th>Period</th><th>Source</th></tr></thead><tbody>${macroRows}</tbody></table>`}
         ${freshness(s.macro[0]?.created_at ?? null)}
       `);
     },
@@ -254,21 +254,21 @@ export async function renderDashboard(p: DashboardParams): Promise<string> {
       const ks = s.killSwitch;
       const actif = ks?.actif === true;
       const banner = actif
-        ? `<div class="ks-banner ks-on">KILL-SWITCH ACTIF — pipeline suspendu${ks?.active_par ? ` (par <span class="mono">${esc(ks.active_par.slice(0, 20))}…</span> le ${esc(fmtDate(ks.active_le))})` : ''}</div>`
-        : `<div class="ks-banner ks-ok">Agents opérationnels — kill-switch inactif</div>`;
-      return card('État agents &amp; kill-switch', `
+        ? `<div class="ks-banner ks-on">KILL-SWITCH ACTIVE — pipeline suspended${ks?.active_par ? ` (by <span class="mono">${esc(ks.active_par.slice(0, 20))}…</span> on ${esc(fmtDate(ks.active_le))})` : ''}</div>`
+        : `<div class="ks-banner ks-ok">Agents operational — kill-switch inactive</div>`;
+      return card('Agent state &amp; kill-switch', `
         ${banner}
         <form class="inline" method="post" action="/killswitch">
           <input type="hidden" name="decided_by" value="${esc(p.ceoPubkey)}">
-          <input type="hidden" name="reason" value="action cockpit CEO (démo)">
-          <button type="submit" name="active" value="${actif ? 'false' : 'true'}">${actif ? 'Désactiver le kill-switch' : 'ACTIVER LE KILL-SWITCH'}</button>
+          <input type="hidden" name="reason" value="cockpit CEO action (demo)">
+          <button type="submit" name="active" value="${actif ? 'false' : 'true'}">${actif ? 'Disable kill-switch' : 'ENABLE KILL-SWITCH'}</button>
         </form>
-        <p class="muted">DÉMO : authentification par npub CEO en configuration. Production : exiger un event Nostr signé.</p>
+        <p class="muted">DEMO: authentication via the configured CEO npub. Production: require a signed Nostr event.</p>
       `);
     },
   );
 
-  // --- Timeline audit ---
+  // --- Audit timeline ---
   const timelineSection = snap === null ? failFast : await section(
     () => Promise.resolve(snap),
     (s) => {
@@ -276,15 +276,15 @@ export async function renderDashboard(p: DashboardParams): Promise<string> {
         const isHl = hl !== '' && t.correlation_id === hl;
         return `<tr class="${isHl ? 'hl' : ''}"><td class="mono">${esc(fmtDate(t.created_at))}</td><td>${esc(t.source)}</td><td>${esc(t.action)}</td><td class="mono">${esc(t.correlation_id ?? '—')}</td></tr>`;
       }).join('');
-      return card('Timeline audit (25 derniers événements)', `
-        ${rows === '' ? '<p class="muted">Journal vide.</p>' : `<div class="scroll"><table><thead><tr><th>Horodatage</th><th>Source</th><th>Action</th><th>correlation_id</th></tr></thead><tbody>${rows}</tbody></table></div>`}
-        <p class="muted">Chaînage hash-to-hash vérifiable via <code>GET /audit/verify</code> — preuve de corrélation bout-en-bout.</p>
+      return card('Audit timeline (last 25 events)', `
+        ${rows === '' ? '<p class="muted">Empty audit log.</p>' : `<div class="scroll"><table><thead><tr><th>Timestamp</th><th>Source</th><th>Action</th><th>correlation_id</th></tr></thead><tbody>${rows}</tbody></table></div>`}
+        <p class="muted">Hash-to-hash chaining verifiable via <code>GET /audit/verify</code> — end-to-end correlation proof.</p>
       `);
     },
   );
 
   return `<!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -295,8 +295,8 @@ export async function renderDashboard(p: DashboardParams): Promise<string> {
 <body>
 <header class="hero">
   <h1>Assurance Toto — Cockpit CEO</h1>
-  <p class="sub">Environnement DÉMO · données 100 % synthétiques · généré le ${esc(fmtDate(generatedAt.toISOString()))} (auto-refresh 30 s)</p>
-  <span class="badge-demo">DÉMO — aucune donnée réelle</span>
+  <p class="sub">DEMO environment · 100% synthetic data · generated on ${esc(fmtDate(generatedAt.toISOString()))} (auto-refresh 30 s)</p>
+  <span class="badge-demo">DEMO environment — synthetic data only</span>
 </header>
 ${p.notice !== undefined && p.notice !== '' ? `<div class="notice">${esc(p.notice)}</div>` : ''}
 <div class="grid">
@@ -309,8 +309,8 @@ ${p.notice !== undefined && p.notice !== '' ? `<div class="notice">${esc(p.notic
   <div class="wide">${timelineSection}</div>
 </div>
 <footer>
-  Lecture seule sur Postgres (vues <code>v_pnl_hebdo</code>, <code>v_ratio_sinistralite</code>, tables <code>pnl_ledger</code>, <code>sinistres</code>, <code>contrats</code>, <code>clients</code>, <code>approbations</code>, <code>audit_log</code>, <code>macro_indicateurs</code>, <code>kill_switch</code>).
-  Aucune écriture depuis cette page ; les décisions passent par les endpoints existants, protégés par la whitelist CEO.
+  Read-only on Postgres (views <code>v_pnl_hebdo</code>, <code>v_ratio_sinistralite</code>, tables <code>pnl_ledger</code>, <code>sinistres</code>, <code>contrats</code>, <code>clients</code>, <code>approbations</code>, <code>audit_log</code>, <code>macro_indicateurs</code>, <code>kill_switch</code>).
+  No writes from this page; decisions go through the existing endpoints, protected by the CEO whitelist.
 </footer>
 </body>
 </html>`;

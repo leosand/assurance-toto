@@ -1,28 +1,28 @@
-# Interface — Agent ORCHESTRATEUR
+# Interface — ORCHESTRATOR Agent
 
-Instance du runtime Hermes (`agents/_runtime`), rôle `orchestrateur`.
-Coordonne les autres agents ; ne produit **aucun effet métier direct**.
+Instance of the Hermes runtime (`agents/_runtime`), role `orchestrateur`.
+Coordinates the other agents; produces **no direct business effect**.
 
-## Entrées
+## Inputs
 - `POST /task` `{ "title": string, "description": string, "correlation_id"?: uuid }`
-- Mode autonome (optionnel) : `AUTONOMY_INTERVAL_SECONDS > 0` → l'agent propose des tâches périodiquement (gated par kill-switch).
+- Autonomous mode (optional): `AUTONOMY_INTERVAL_SECONDS > 0` → the agent proposes tasks periodically (gated by kill-switch).
 - `GET /healthz`, `GET /readyz` (pg + ollama).
 
-## Outils internes autorisés (mcp-allowlist.json)
-`lire_sinistre`, `lire_client`, `lire_contrat`, `calculer_prime`, `evaluer_risque`, `qualifier_lead`, `recommander_reglement`, `requeter_pnl`, `consulter_memoire` — tous en **lecture seule** sauf `recommander_reglement` qui ne fait que produire une commande candidate.
+## Authorized internal tools (mcp-allowlist.json)
+`lire_sinistre`, `lire_client`, `lire_contrat`, `calculer_prime`, `evaluer_risque`, `qualifier_lead`, `recommander_reglement`, `requeter_pnl`, `consulter_memoire` — all **read-only** except `recommander_reglement`, which only produces a candidate command.
 
 ## MCP (via gateway)
-`mcp-postgres` (lecture seule), `bridge` (POST /commands).
+`mcp-postgres` (read-only), `bridge` (POST /commands).
 
-## Sorties
+## Outputs
 `TaskResult` `{ correlation_id, agent, toolCalls[], command?, fallbackText?, summary, stoppedByKillSwitch }`.
-- `toolCalls[]` = journal des outils exécutés (nom, ok, résultat).
-- `command` = résultat du `POST {BRIDGE_URL}/commands` si une recommandation a été émise.
+- `toolCalls[]` = log of executed tools (name, ok, result).
+- `command` = result of `POST {BRIDGE_URL}/commands` if a recommendation was issued.
 
-## Contrat de corrélation
-- `correlation_id` fourni > sinon UUID frais généré au départ.
-- Propagé : logs pino, POST bridge, entrée `memoire_agents`.
-- Permet de suivre le cycle complet `tâche → outil → commande bridge → approbation`.
+## Correlation contract
+- `correlation_id` provided > otherwise a fresh UUID generated at start.
+- Propagated: pino logs, bridge POST, `memoire_agents` entry.
+- Makes it possible to follow the full cycle `task → tool → bridge command → approval`.
 
-## Sécurité
-Kill-switch vérifié avant chaque action autonome et avant tout POST bridge. Allowlist deny-by-default.
+## Security
+Kill-switch checked before each autonomous action and before any bridge POST. Deny-by-default allowlist.

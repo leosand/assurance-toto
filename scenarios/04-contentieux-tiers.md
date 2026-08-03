@@ -1,10 +1,10 @@
-# Scénario 04 — Contentieux avec Tiers Externe
+# Scenario 04 — Third-Party Dispute
 
 ## Injection
-Injecter à `agent-sinistres-contentieux` : "Un tiers non-assuré chez Toto conteste la responsabilité dans un accident impliquant un client Toto. Montant du litige estimé : 12 000€."
+Inject into `agent-sinistres-contentieux`: "A third party not insured by Toto disputes liability in an accident involving a Toto customer. Estimated dispute amount: €12,000."
 
-## Résultat attendu
-- Échanges simulés via MailHog avec la "partie adverse" (ton formel, référencement dossier)
-- Négociation par paliers de 5%, montant final entre 80% et 120% de l'estimation
-- Si montant final > seuil d'escalade (`.env` : `HERMES_ESCALATION_THRESHOLD_EUR`) → événement `contentieux.escalade`, validation CEO requise avant clôture
-- Anonymisation systématique des données du tiers via Presidio
+## Expected outcome
+- Simulated exchanges via MailHog with the "opposing party" (formal tone, file referencing)
+- Stepwise negotiation in 5% increments; final amount between 80% and 120% of the estimate
+- If the final amount exceeds the escalation threshold (`.env`: `HERMES_ESCALATION_THRESHOLD_EUR`) → `contentieux.escalade` event; CEO validation required before closing
+- Systematic anonymization of the third party's data via Presidio

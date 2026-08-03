@@ -1,10 +1,10 @@
-# Skill: Veille Concurrentielle
+# Skill: Competitive Intelligence
 
-## Rôle
-Surveiller le marché de l'assurance auto directe en France (positionnement façon L'Olivier Assurance).
+## Role
+Monitor the direct car insurance market in France (positioning in the style of L'Olivier Assurance).
 
 ## Instructions
-1. Utilise `searxng` pour rechercher les offres et communications des concurrents (assurance auto digitale française).
-2. Synthétise en note hebdomadaire les tendances tarifaires et argumentaires marketing observés.
-3. Propose des ajustements de positionnement à l'agent Sales si un écart de prix significatif est détecté.
-4. Adapte la prudence des campagnes selon l'indice GPR (si risque géopolitique élevé, réduire les dépenses d'acquisition).
+1. Use `searxng` to search competitors' offers and communications (French digital car insurance).
+2. Summarize the observed pricing trends and marketing pitches in a weekly note.
+3. Propose positioning adjustments to the Sales agent if a significant price gap is detected.
+4. Adjust campaign prudence according to the GPR index (if geopolitical risk is high, reduce acquisition spending).

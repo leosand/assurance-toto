@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# scripts/healthcheck.sh — État de santé par service, fail-fast.
-# Usage : ./scripts/healthcheck.sh [--all]
-# sans option : vérifie les services cœur (postgres, buzz, bridge, presidio).
-# --all : inclut les agents et mcp-git.
+# scripts/healthcheck.sh — Health status per service, fail-fast.
+# Usage: ./scripts/healthcheck.sh [--all]
+# without option: checks the core services (postgres, buzz, bridge, presidio).
+# --all: also includes the agents and mcp-git.
 
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -26,7 +26,7 @@ report() {
 
 banner "healthcheck — ${COMPOSE_FILE}"
 
-# --- postgres métier ---
+# --- business postgres ---
 if "${DC[@]}" exec -T postgres pg_isready -U "${PG_USER:-toto}" -d "${PG_DB:-assurance_toto}" >/dev/null 2>&1; then
   report postgres ok "pg_isready"
 else
@@ -54,7 +54,7 @@ fi
 PRESIDIO_URL="${PRESIDIO_URL:-http://localhost:3003/health}"
 code="$(http_code "$PRESIDIO_URL" 2>/dev/null)"
 if [ "$code" = "200" ] || [ "$code" = "302" ]; then
-  # presidio-analyzer n'a pas d'endpoint /health public ; 302/200 = up
+  # presidio-analyzer has no public /health endpoint; 302/200 = up
   report presidio ok "$PRESIDIO_URL → $code"
 else
   report presidio down "$PRESIDIO_URL → $code"
@@ -64,24 +64,24 @@ if [ "$FULL" -eq 1 ]; then
   # --- 4 agents (lite) ---
   for svc in agent-orchestrateur agent-sales agent-souscription agent-sinistres-contentieux; do
     if "${DC[@]}" exec -T "$svc" sh -c 'wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || curl -fsS http://127.0.0.1:8080/healthz >/dev/null 2>&1' 2>/dev/null; then
-      report "$svc" ok "healthz interne ok"
+      report "$svc" ok "internal healthz ok"
     else
-      report "$svc" down "healthy KO"
+      report "$svc" down "healthz KO"
     fi
   done
   # --- mcp-git ---
   if "${DC[@]}" ps --status running --services 2>/dev/null | grep -qx 'mcp-git'; then
     report mcp-git ok "service running"
   else
-    report mcp-git down "service absent/stoppé"
+    report mcp-git down "service absent/stopped"
   fi
 fi
 
 printf '\n'
 if [ "$FAIL" -eq 0 ]; then
-  log_ok "Healthcheck OK — 0 service en échec."
+  log_ok "Healthcheck OK — 0 services failing."
   exit 0
 else
-  log_err "Healthcheck KO — $FAIL service(s) en échec."
+  log_err "Healthcheck KO — $FAIL service(s) failing."
   exit 1
 fi

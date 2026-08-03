@@ -1,7 +1,7 @@
 /**
  * Repository seam: deep module hiding Postgres behind a small interface.
  * Unit tests swap in an in-memory implementation — no Docker/pg required.
- * Toutes les requêtes métier vivent ici, jamais dans la pipeline.
+ * All business queries live here, never in the pipeline.
  */
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import type { BridgeConfig } from '../config.js';
@@ -28,7 +28,7 @@ export interface ApprobationRow {
   reason: string | null;
   decided_at: string | null;
   created_at: string;
-  /** Résultat de l'exécution après décision 'approuve' (§6B : chaîne apiidecide→claim.settlement.approve). */
+  /** Execution result after 'approve' decision (§6B: api-decide→claim.settlement.approve chain). */
   execution?: PipelineResult['outcome'];
 }
 
@@ -39,7 +39,7 @@ export interface KillSwitchRow {
   active_le: string | null;
 }
 
-/** Contexte minimal consommé par la politique de décision. */
+/** Minimal context consumed by the decision policy. */
 export interface PolicyContext {
   killSwitch: KillSwitchRow | null;
   sinistre: SinistreRow | null;
@@ -52,7 +52,7 @@ export interface Tx {
   query<R extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<QueryResult<R>>;
 }
 
-/** Effet métier appliqué dans la transaction Postgres. */
+/** Business effect applied inside the Postgres transaction. */
 export interface Repository {
   ping(): Promise<boolean>;
   findSinistre(claimId: string): Promise<SinistreRow | null>;
@@ -61,7 +61,7 @@ export interface Repository {
   appendAudit(correlationId: string, source: string, action: string, payload: unknown, hash: string, prevHash: string): Promise<void>;
   inTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T>;
   listApprovals(statut?: ApprobationRow['statut'], limit?: number): Promise<ApprobationRow[]>;
-  /** Crée une approbation 'en_attente' (escalade CEO depuis un agent, brief §6B). */
+  /** Creates an 'en_attente' approval (CEO escalation from an agent, brief §6B). */
   createApprobation(input: {
     correlationId: string;
     type: string;
@@ -72,13 +72,13 @@ export interface Repository {
   }): Promise<ApprobationRow>;
   decideApprobation(correlationId: string, decidedBy: string, reason: string, approve: boolean): Promise<ApprobationRow | null>;
   setKillSwitch(actif: boolean, activePar: string): Promise<void>;
-  /** Snapshot lecture seule pour le cockpit CEO (ADR-002) — aucune mutation. */
+  /** Read-only snapshot for the CEO cockpit (ADR-002) — no mutation. */
   dashboardSnapshot(): Promise<DashboardSnapshot>;
   close(): Promise<void>;
 }
 
 // ---------- types lecture seule du cockpit CEO (/dashboard, ADR-002) ----------
-/** Fraîcheur d'une section : date la plus récente observée dans les données sources. */
+/** Section freshness: most recent date observed in the source data. */
 export interface SectionFreshness {
   latest: string | null;
 }
@@ -101,7 +101,7 @@ export interface RatioSinistraliteRow {
 }
 
 export interface PipelineStats {
-  leads: number | null; // null = non dérivable du schéma actuel (pas de table leads)
+  leads: number | null; // null = not derivable from current schema (no leads table)
   contrats: number;
   clients: number;
   latest: string | null;
@@ -127,8 +127,8 @@ export interface MacroIndicateurRow {
 }
 
 export interface AnonymisationStats {
-  count: number; // entrées audit_log dont action/payload mentionne l'anonymisation
-  tracked: boolean; // false si le comptage n'a pas pu être établi
+  count: number; // audit_log entries whose action/payload mentions anonymisation
+  tracked: boolean; // false if the count could not be established
 }
 
 export interface AuditTimelineRow {
@@ -273,8 +273,8 @@ export class PgRepository implements Repository {
 
   /**
    * Cockpit CEO (ADR-002, option cockpit lean) : snapshot 100 % lecture seule.
-   * Requêtes indépendantes exécutées en parallèle ; chaque section rapporte sa
-   * fraîcheur (MAX(created_at)) pour que la page affiche l'âge des données.
+   * Independent queries run in parallel; each section reports its own
+   * freshness (MAX(created_at)) so the page shows the age of the data.
    */
   async dashboardSnapshot(): Promise<DashboardSnapshot> {
     const num = (v: unknown): number => {
@@ -291,14 +291,14 @@ export class PgRepository implements Repository {
     const ratiosP = this.pool.query<{ departement: string; ratio_sinistralite: string | null }>(
       'SELECT departement, ratio_sinistralite::text FROM v_ratio_sinistralite ORDER BY departement',
     );
-    // Pas de table leads dans le schéma actuel → leads: null (non inventé).
+    // No leads table in the current schema → leads: null (not invented).
     const pipelineP = this.pool.query<{ clients: string; contrats: string; latest: string | null }>(
       `SELECT (SELECT COUNT(*) FROM clients)::text AS clients,
               (SELECT COUNT(*) FROM contrats)::text AS contrats,
               GREATEST((SELECT MAX(created_at) FROM clients), (SELECT MAX(created_at) FROM contrats))::text AS latest`,
     );
-    // montant_eur est inexistant sur sinistres : on somme montant_regle s'il est
-    // renseigné, sinon montant_estime (montant provisionné pour les ouverts).
+    // montant_eur does not exist on sinistres: we sum montant_regle if
+    // present, else montant_estime (provisioned amount for open ones).
     const sinistresP = this.pool.query<{ statut: string; nb: string; montant: string | null; latest: string | null }>(
       `SELECT statut, COUNT(*)::text AS nb,
               SUM(COALESCE(montant_regle, montant_estime))::text AS montant,
@@ -316,8 +316,8 @@ export class PgRepository implements Repository {
       `SELECT DISTINCT ON (indicateur) indicateur, valeur::text, periode, source, created_at::text
          FROM macro_indicateurs ORDER BY indicateur, created_at DESC`,
     );
-    // Traçabilité anonymisation : détection souple - action ILIKE '%anonym%'
-    // ou payload JSONB contenant un marqueur (anonymized / anonymise / anonymisation).
+    // Anonymisation traceability: soft detection - action ILIKE '%anonym%'
+    // or a JSONB payload containing a marker (anonymized / anonymise / anonymisation).
     const anonymP = this.pool.query<{ nb: string }>(
       `SELECT COUNT(*)::text AS nb FROM audit_log
         WHERE action ILIKE '%anonym%'
@@ -467,12 +467,12 @@ export function makeMemoryRepository(opts?: {
     async setKillSwitch(actif, activePar) {
       state.killSwitch = { id: 1, actif, active_par: activePar, active_le: actif ? new Date().toISOString() : null };
     },
-    // Snapshot lecture seule dérivé de l'état en mémoire (miroir des vues SQL).
+    // Read-only snapshot derived from in-memory state (mirror of the SQL views).
     async dashboardSnapshot(): Promise<DashboardSnapshot> {
-      // Σ ledger (résultat cumulé) + P&L hebdo agrégé par semaine ISO / département.
+      // Σ ledger (cumulative result) + weekly P&L aggregated by ISO week / department.
       const byWeekDept = new Map<string, PnlWeeklyRow>();
       for (const e of state.pnl) {
-        // Seeds sans created_at : la semaine dérive du timestamp connu à l'INSERT, sinon 'n-d'.
+        // Seeds without created_at: the week derives from the known INSERT timestamp, else 'n-d'.
         const sem = isoWeekOf(state.pnlCreatedAt.get(e.id) ?? null);
         const key = `${sem}|${e.departement}`;
         const row = byWeekDept.get(key) ?? { semaine_iso: sem, departement: e.departement, resultat_net: 0 };
@@ -485,7 +485,7 @@ export function makeMemoryRepository(opts?: {
           : b.semaine_iso.localeCompare(a.semaine_iso),
       );
 
-      // Ratio de sinistralité par département : |charges| / primes (miroir v_ratio_sinistralite).
+      // Claims ratio per department: |charges| / premiums (mirror of v_ratio_sinistralite).
       const primesBy = new Map<string, number>();
       const chargesBy = new Map<string, number>();
       for (const e of state.pnl) {
@@ -536,7 +536,7 @@ export function makeMemoryRepository(opts?: {
   return { repo, state };
 }
 
-/** Semaine ISO dérivable d'un timestamp connu, sinon 'n-d'. */
+/** ISO week derivable from a known timestamp, else 'n-d'. */
 function isoWeekOf(iso: string | null): string {
   if (iso === null) return 'n-d';
   const d = new Date(iso);
@@ -551,9 +551,9 @@ export interface MemoryState {
   consumed: Set<string>;
   audit: MemoryAuditRow[];
   pnl: MemoryPnlRow[];
-  /** created_at ISO connu à l'INSERT (stubs memoryQuery sans paramètre date). */
+  /** ISO created_at known at INSERT (memoryQuery stubs without date parameter). */
   pnlCreatedAt: Map<number, string>;
-  /** Fraîcheur P&L seedée directement par les tests, sinon déduite de pnlCreatedAt. */
+  /** P&L freshness seeded directly by tests, otherwise derived from pnlCreatedAt. */
   pnlLatest: string | null;
   macro: MacroIndicateurRow[];
   approbations: Map<string, ApprobationRow>;
@@ -579,15 +579,15 @@ export interface MemoryAuditRow {
   created_at: string;
 }
 
-/** Effet métier minimal : la pipeline appelle ces méthodes dans la transaction. */
+/** Minimal business effect: the pipeline calls these methods inside the transaction. */
 export async function settleClaimEffect(
   tx: Tx,
   cmd: Extract<Command, { type: 'claim.settlement.approve' }>,
   correlationId: string,
   thresholdEur: number,
 ): Promise<{ pnlRowId: number; montant: number }> {
-  // Montant effectif du règlement = min(montant autorisé max, plafond global).
-  // Dans la vraie boucle il viendrait du sinistre ; la politique a déjà plafonné.
+  // Effective settlement amount = min(max authorized amount, global cap).
+  // In the real loop it would come from the claim; the policy already capped it.
   const montant = -Math.abs(Math.min(cmd.max_amount_eur, thresholdEur));
   const r = await tx.query<{ id: string }>(
     'INSERT INTO pnl_ledger (correlation_id, departement, categorie, montant, description) VALUES ($1,$2,$3,$4,$5) RETURNING id::text',
@@ -602,7 +602,7 @@ export async function settleClaimEffect(
   return { pnlRowId, montant };
 }
 
-/** Query dispatch minimal pour le repo en mémoire (tests uniquement). */
+/** Minimal query dispatch for the in-memory repo (tests only). */
 function memoryQuery(
   state: MemoryState,
   text: string,
@@ -658,7 +658,7 @@ function memoryQuery(
       description: String(params[4] ?? ''),
     };
     state.pnl.push(row);
-    // Stub SQL sans paramètre de date : horodatage à l INSERT (tests uniquement).
+    // SQL stub without date parameter: timestamp at INSERT (tests only).
     const insertedAt = new Date().toISOString();
     state.pnlCreatedAt.set(row.id, insertedAt);
     state.pnlLatest = insertedAt;

@@ -1,9 +1,9 @@
-# Skill: Vérification de Véto
+# Skill: Veto Check
 
-## Rôle
-Point de contrôle transversal appelé par l'orchestrateur avant toute action à risque réglementaire.
+## Role
+Cross-cutting checkpoint called by the orchestrator before any action carrying regulatory risk.
 
 ## Instructions
-1. Reçois la demande de vérification (action + agent + montant + type de données concernées).
-2. Applique les règles de `security/presidio-config.yml` et `security/mcp-allowlist.json`.
-3. Retourne APPROUVE ou BLOQUE avec justification. Si BLOQUE, l'action est annulée et le CEO est notifié.
+1. Receive the check request (action + agent + amount + type of data concerned).
+2. Apply the rules from `security/presidio-config.yml` and `security/mcp-allowlist.json`.
+3. Return APPROVE or BLOCK with justification. If BLOCK, the action is cancelled and the CEO is notified.

@@ -1,33 +1,33 @@
-# Journal des Décisions CEO — Assurance Toto
+# CEO Decision Log — Assurance Toto
 
-> Ce fichier est mis à jour automatiquement par l'agent orchestrateur à chaque décision CEO enregistrée
-> et committé vers Gitea local pour traçabilité complète.
+This file is updated automatically by the orchestrator agent on each recorded CEO decision
+> and committed to local Gitea for full traceability.
 
-## Format d'entrée
+## Entry format
 
 ```
-### YYYY-MM-DD — Type de décision
-- Détail : ...
-- Impact estimé : XXXX €
-- Département(s) concerné(s) : ...
+### YYYY-MM-DD Decision type
+- Detail
+- Estimated impact XXXX €
+- Department(s) concerned: ...
 ```
 
 ---
 
-*(Aucune décision enregistrée pour le moment — le journal se remplit automatiquement dès le premier cycle de simulation.)*
+*(No decision recorded yet — the log fills automatically from the first simulation cycle.)*
 
-## ADR-001 — Intégration Buzz by Block (cockpit/identité/supervision)
+## ADR-001 — Buzz by Block Integration (cockpit/identity/supervision)
 
-- Décision : embarquer l'image publiée `ghcr.io/block/buzz:<pin>` (pull-only) dans notre compose à côté de postgres/redis/minio, NIP-29 channels. Aucun build Rust from source (risque 20-45 min + Go sur WSL2).
-- Message canal vérifié : NIP-01 kind 9, tags first `[["h","<channel-uuid-lowercase>"]]`, `content` texte ≤64 KiB (markdown/@mentions). Kind 40002 = V2 réservé, non émis.
-- API bridge TS : REST `POST /events|/query|/count` (auth NIP-98 header `Authorization: Nostr <b64(kind27235+json)>`) ou WS NIP-01+NIP-42 (kind 22242). Client officiel = Rust; web UI embarque `nostr-tools@^2.23` → nostr-tools compatible (kinds = entiers).
-- Bootstrap : `buzz-admin generate-key|add-member --pubkey|list-members|reconcile-channels` (roles member|admin). Canaux/communautés hors buzz-admin : `POST /operator/communities` puis `buzz channels create/add-member --role bot`.
-- Limites amont (à ne PAS utiliser, encapsulées) : approval gates workflow (WF-08 🚧), `send_dm`, `set_channel_topic`, rate-limiting.
-- Buzz n'est PAS la source de vérité métier (Postgres la demeure); tout Buzz passe par un `CollabAdapter` interchangeable (Rocket.Chat/Gitea possible).
+- Decision: ship the published image `ghcr.io/block/buzz:<pin>` (pull-only) in our compose alongside postgres/redis/minio, NIP-29 channels. No Rust build from source (20-45 min risk + Go on WSL2).
+- Verified channel message: NIP-01 kind 9, tags first `[["h","<channel-uuid-lowercase>"]]`, `content` text ≤64 KiB (markdown/@mentions). Kind 40002 = reserved V2, not emitted.
+- TS bridge API: REST `POST /events|/query|/count` (NIP-98 auth header `Authorization: Nostr <b64(kind27235+json)>`) or WS NIP-01+NIP-42 (kind 22242). Official client = Rust; web UI ships `nostr-tools@^2.23` → nostr-tools compatible (integer kinds).
+- Bootstrap: `buzz-admin generate-key|add-member --pubkey|list-members|reconcile-channels` (roles member|admin). Channels/communities outside buzz-admin: `POST /operator/communities` then `buzz channels create/add-member --role bot`.
+- Upstream limitations (do NOT use, encapsulated): workflow approval gates (WF-08 pending), `send_dm`, `set_channel_topic`, rate-limiting.
+- Buzz is NOT the business source of truth (Postgres remains it); all Buzz traffic goes through an interchangeable `CollabAdapter` (Rocket.Chat/Gitea possible).
 
-## ADR-002 — Cockpit CEO : dashboard lean natif (pas Next.js §7 complet en Phase 1)
+## ADR-002 — CEO Cockpit: native lean dashboard (no full Next.js §7 in Phase 1)
 
-- Décision (validée par l'utilisateur) : Phase 1 = cockpit CEO lean rendu côté serveur, servi par le `buzz-hermes-bridge` (route `/dashboard`), 100 % lu depuis Postgres.
-- Contenu : P&L (résultat net + ratio sinistres/primes), pipeline lead→contrat, file d'approbations CEO cliquables, statut agents + kill switch, timeline des événements avec `correlation_id`. Buzz reste le cockpit « vivant » (messages/approbations signées).
-- Justification ROI : le vrai argument commercial = traçabilité + approbation CEO, pas des graphiques. §7 complet différé en Phase 2.
-- Options documentées (réversibles) : (a) cockpit lean — RETENU ; (b) Next.js + shadcn/ui + ECharts §7 complet — rejeté Phase 1 (surcharge ~2500 lignes, message brouillé) ; (c) Buzz-seul — rejeté (brief §7 exige un dashboard distinct, différenciant démo).
+- Decision (validated by the user): Phase 1 = lean CEO cockpit, server-side rendered, served by the `buzz-hermes-bridge` (route `/dashboard`), 100% read from Postgres.
+- Content: P&L (net result + claims/premiums ratio), lead→contract pipeline, clickable CEO approval queue, agent status + kill switch, event timeline with `correlation_id`. Buzz remains the "live" cockpit (signed messages/approvals).
+- ROI rationale: the real selling point = traceability + CEO approval, not charts. Full §7 deferred to Phase 2.
+- Documented options (reversible): (a) lean cockpit — RETAINED; (b) Next.js + shadcn/ui + ECharts full §7 — rejected in Phase 1 (~2500 lines bloat, blurred message); (c) Buzz-only — rejected (§7 brief requires a distinct dashboard, demo differentiator).

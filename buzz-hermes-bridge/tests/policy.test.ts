@@ -3,7 +3,7 @@ import { evaluate, type Role } from '../src/policy/policy.js';
 import type { PolicyContext, SinistreRow, KillSwitchRow } from '../src/db/repository.js';
 import type { Command } from '../src/commands/schemas.js';
 
-// Clés synthétiques (jamais réutilisées ailleurs). CEO hex autorisé par la config.
+// Synthetic keys (never reused elsewhere). CEO hex authorized by the config.
 const CEO_HEX = '853d09e8161497fd4ba0df474d87187a9764c866525e418de4b58442bb20d8ff';
 const AGENT_HEX = 'fd904a8dddb79fc6e833c940ad9b6a9377e66b4b80361dc41ee6327da89d9103';
 
@@ -30,69 +30,69 @@ function approveCmd(overrides: Record<string, unknown> = {}): Command {
   } as Command;
 }
 
-describe('policy.evaluate — 7 règles de déni + allow (autonomie agent §6B)', () => {
-  it("1) rôle non autorisé (sales) → deny 'rbac:reglement_non_autorise_pour_role'", () => {
+describe('policy.evaluate — 7 deny rules + allow (agent autonomy §6B)', () => {
+  it("1) unauthorized role (sales) → deny 'rbac:reglement_non_autorise_pour_role'", () => {
     const r = evaluate({ cmd: approveCmd(), ctx: ctx(), role: 'agent-sales' });
     expect(r.allow).toBe(false);
     expect(r.reason).toBe('rbac:reglement_non_autorise_pour_role');
   });
 
-  it('2) sinistre introuvable → deny', () => {
+  it('2) claim/sinistre not found → deny', () => {
     const r = evaluate({ cmd: approveCmd(), ctx: ctx({ sinistre: null }), role: 'ceo' });
     expect(r.allow).toBe(false);
     expect(r.reason).toBe('sinistre:introuvable');
   });
 
-  it('2b) sinistre dans un mauvais état → deny', () => {
+  it('2b) claim/sinistre in a bad state → deny', () => {
     const s: SinistreRow = { id: 'CLM-1', statut: 'regle', montant_eur: 100, compliance_bloque: false };
     const r = evaluate({ cmd: approveCmd(), ctx: ctx({ sinistre: s }), role: 'ceo' });
     expect(r.allow).toBe(false);
     expect(r.reason).toContain('statut_invalide');
   });
 
-  it('3) montant supérieur au plafond demandé (CEO signé) → deny', () => {
-    // Sous-dimensionnement du max : max_amount < montant du sinistre → deny même CEO.
+  it('3) amount above the requested cap (signed CEO) → deny', () => {
+    // Undersized max: max_amount < claim/sinistre amount → deny even for the CEO.
     const s: SinistreRow = { id: 'CLM-1', statut: 'ouvert', montant_eur: 9000, compliance_bloque: false };
     const r = evaluate({ cmd: approveCmd({ max_amount_eur: 4000 }), ctx: ctx({ sinistre: s }), role: 'ceo' });
     expect(r.allow).toBe(false);
     expect(r.reason).toContain('montant');
   });
 
-  it('4) commande déjà consommée (idempotence) → deny', () => {
+  it('4) command already consumed (idempotence) → deny', () => {
     const r = evaluate({ cmd: approveCmd(), ctx: ctx({ commandConsumed: true }), role: 'ceo' });
     expect(r.allow).toBe(false);
     expect(r.reason).toContain('commande_deja_consommee');
   });
 
-  it('5) flag conformité sur le dossier → deny', () => {
+  it('5) compliance flag on the case → deny', () => {
     const s: SinistreRow = { id: 'CLM-1', statut: 'ouvert', montant_eur: 100, compliance_bloque: true };
     const r = evaluate({ cmd: approveCmd(), ctx: ctx({ sinistre: s }), role: 'ceo' });
     expect(r.allow).toBe(false);
     expect(r.reason).toBe('conformite:dossier_bloque');
   });
 
-  it('6) kill-switch actif : toute exécution autonome est bloquée → deny', () => {
+  it('6) kill-switch active: every autonomous execution is blocked → deny', () => {
     const ks: KillSwitchRow = { id: 1, actif: true, active_par: CEO_HEX, active_le: '2026-08-02T00:00:00Z' };
     const r = evaluate({ cmd: approveCmd(), ctx: ctx({ killSwitch: ks }), role: 'ceo' });
     expect(r.allow).toBe(false);
     expect(r.reason).toContain('killswitch');
   });
 
-  it('6b) kill-switch actif : killswitch.deactivate est LE seul à passer', () => {
+  it('6b) kill-switch active: killswitch.deactivate is THE only one to pass', () => {
     const ks: KillSwitchRow = { id: 1, actif: true, active_par: CEO_HEX, active_le: '2026-08-02T00:00:00Z' };
     const deactivate: Command = {
       type: 'agent.killswitch.deactivate',
       approved_by: CEO_HEX,
-      reason: 'reprise',
+      reason: 'resume',
       requested_at: '2026-08-02T01:00:00.000Z',
     };
     const r = evaluate({ cmd: deactivate, ctx: ctx({ killSwitch: ks }), role: 'ceo' });
     expect(r.allow).toBe(true);
   });
 
-  it('7) (signature) vérifiée hors evaluate — voir pipeline/http; ici le rôle "inconnu" est deny', () => {
-    // La signature Nostr est vérifiée en amont (BuzzAdapter + POST /commands).
-    // evaluate reçoit un rôle résolu ; un auteur non résolu (signature KO → rôle indéterminé) est deny.
+  it('7) (signature) verified outside evaluate — see pipeline/http; here the "unknown" role is deny', () => {
+    // The Nostr signature is verified upstream (BuzzAdapter + POST /commands).
+    // evaluate receives a resolved role; an unresolved author (signature KO → undetermined role) is denied.
     const r = evaluate({ cmd: approveCmd(), ctx: ctx(), role: 'inconnu' as Role });
     expect(r.allow).toBe(false);
   });
@@ -102,14 +102,14 @@ describe('policy.evaluate — 7 règles de déni + allow (autonomie agent §6B)'
     expect(r.allow).toBe(true);
   });
 
-  it('autonomie §6B : agent-sinistres sous le seuil → ALLOW (approved_by agent)', () => {
+  it('autonomy §6B: agent-sinistres under the threshold → ALLOW (approved_by agent)', () => {
     const cmd = approveCmd({ approved_by: AGENT_HEX, max_amount_eur: 2500 });
     const s: SinistreRow = { id: 'CLM-1', statut: 'ouvert', montant_eur: 2500, compliance_bloque: false };
     const r = evaluate({ cmd, ctx: ctx({ sinistre: s }), role: 'agent-sinistres' });
     expect(r.allow).toBe(true);
   });
 
-  it("autonomie §6B : agent-sinistres AU-DESSUS du seuil → DENY 'rbac:au_dessus_seuil_reserve_CEO'", () => {
+  it("autonomy §6B: agent-sinistres ABOVE the threshold → DENY 'rbac:au_dessus_seuil_reserve_CEO'", () => {
     const s: SinistreRow = { id: 'CLM-1', statut: 'ouvert', montant_eur: 9000, compliance_bloque: false };
     const r = evaluate({
       cmd: approveCmd({ approved_by: AGENT_HEX, max_amount_eur: 9000 }),
@@ -120,9 +120,9 @@ describe('policy.evaluate — 7 règles de déni + allow (autonomie agent §6B)'
     expect(r.reason).toBe('rbac:au_dessus_seuil_reserve_CEO');
   });
 
-  it('autonomie §6B : CEO signé AU-DESSUS du seuil (max élevé) → ALLOW', () => {
+  it('autonomy §6B: signed CEO ABOVE the threshold (high max) → ALLOW', () => {
     const s: SinistreRow = { id: 'CLM-1', statut: 'ouvert', montant_eur: 9000, compliance_bloque: false };
-    // Le CEO peut régler au-dessus : max_amount_eur couvre le sinistre.
+    // The CEO can settle above: max_amount_eur covers the claim/sinistre.
     const r = evaluate({
       cmd: approveCmd({ max_amount_eur: 12000 }),
       ctx: ctx({ sinistre: s }),
@@ -131,7 +131,7 @@ describe('policy.evaluate — 7 règles de déni + allow (autonomie agent §6B)'
     expect(r.allow).toBe(true);
   });
 
-  it('policy.pricing.exception.approve exige CEO', () => {
+  it('policy.pricing.exception.approve requires the CEO', () => {
     const cmd = {
       type: 'policy.pricing.exception.approve',
       contrat_id: 'CT-1',
@@ -145,7 +145,7 @@ describe('policy.evaluate — 7 règles de déni + allow (autonomie agent §6B)'
     expect(evaluate({ cmd, ctx: ctx(), role: 'ceo' }).allow).toBe(true);
   });
 
-  it('finance.report.request : sales refusé, finance autorisé', () => {
+  it('finance.report.request: sales denied, finance allowed', () => {
     const cmd = {
       type: 'finance.report.request',
       periode: '2026-07',
