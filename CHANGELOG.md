@@ -1,5 +1,22 @@
 # Changelog — Assurance Toto jumeau numérique
 
+## [0.3.1] — 2026-08-03T13:40:00-04:00
+
+> Fix URLs navigateurs : Buzz UI accessible (RELAY_URL + BUZZ_SERVE_GIT_WEB_GUI), bridge / → dashboard. README premium style Space Program + LICENSE Apache 2.0.
+
+### Fixed
+
+- Buzz relay : ajout `RELAY_URL=ws://localhost:3002` (la communauté se lie au host public, fail-closed sinon) + `BUZZ_SERVE_GIT_WEB_GUI=true` (l'UI web est servie par le fallback SPA sur `/repos` ; `/` reste l'API Nostr NIP-11/WS par conception)
+- Buzz UI désormais accessible sur http://localhost:3002/repos (200 text/html)
+- Bridge : ajout `GET /` → 302 `/dashboard` (landing convivial)
+- Bridge V&V : `/readyz` ready, `/dashboard` 200, `/approvals` 200, `/metrics` 200 — tests 56/56 verts
+
+### Added
+
+- README.md réécrit au format premium (badges, sections emoji, stack, quickstart, demo 15min, structure, license, team) inspiré du style Space Program
+- LICENSE (Apache 2.0)
+- QUICKSTART.md mis à jour (URLs réelles)
+
 ## [0.3.0] — 2026-08-03T12:45:00-04:00
 
 > V&V complète, containerisation totale (8 agents + bridge), nettoyage repo. Toutes les images buildées, stack prouvée E2E sur machine locale.
