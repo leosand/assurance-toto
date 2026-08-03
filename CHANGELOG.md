@@ -1,5 +1,32 @@
 # Changelog — Assurance Toto jumeau numérique
 
+## [0.2.0] — 2026-08-03T01:38:55-04:00
+
+> Traduction complète vers l'anglais (i18n) et durcissement production du dépôt. Push GitHub en « main » avec historique purgé (`.env` retiré, aucun secret en clair).
+
+### Added
+
+- **Traduction EN complète** : README, ARCHITECTURE, SECURITY, AGENTS, docs, scripts (`*.sh`, `*.py`, `*.ts`), skills des agents Markdown (FR→EN), setup-windows/ (`README`, `INSTALL-WINDOWS11`, `SECURITY`, `TROUBLESHOOTING`, `CONTRIBUTING`, `CHANGELOG-SETUP`) — tout traduit à l'anglais, sans toucher la logique ni les identifiants.
+- **GitHub Actions CI** : `.github/workflows/ci.yml` (bridge/runtime en tsc + vitest + compose config check).
+- **E2E validé** : stack Docker démarrage à vide sur Windows 11 + WSL2 + 16 GB (vrais services UP, endpoints prêts) — healthcheck OK (pg `pg_isready`, buzz `/health`, bridge `/readyz`, presidio OK) et 4 agents UP.
+
+### Changed
+
+- **Corriger l'image `postgres`** : passage à `pgvector/pgvector:pg16` sur les 2 compose. Le seed → extensión vector (768 dims) nécessaire pour épingler la mémoire agents (PGVector).
+- **Sécurité des identités** : génération de la paire Schnorr/Nostr — relay `BUZZ_RELAY_PRIVATE_KEY`, propriétaire `RELAY_OWNER_PUBKEY` (CEO) — dans « .env.local » par Gard(ée,t `chmod 0600` ; regeneré via `scripts/bootstrap-buzz.sh`.
+- **`BRIDGE_ALLOWED_UNSIGNED_ROLES`** de 4 npub agents validés (les nsec → .env.buzz), **jamais le CEO non signé**.
+- **Port 5434** pour éviter les conflits sur la machine (batirops_db prend 5432, supabase/printfarm d'autres ports) ; `docker compose up` pur=8100 OK.
+- Suppression `.env` de l'historique Git (`git filter-repo --path .env --invert-paths --force`) + `.env.buzz` ajouté à `.gitignore`.
+
+### Fixed
+
+- **Workflow §6B** E2E prouvé : sinistre 7100€, `agent` soutient approbation (`POST /approvals` avec `reason` requis), CEO signe Nostr (`verifyEvent`) et `/decide`, `statut=approuve` → `effect=settle claim` (montant=$(6800 €) + `sinistre.statut='regle'`). Audit prosequi audit_log / contract / pnl_ledger matériels.
+- **Anti-forge CEO** : `signature.valid` mais npub CEO deny `rbac:ceo_sans_signature` (strict vs `BRIDGE_REQUIRE_SIGNED_COMMANDS=true`).
+- **Idempotence`claim_recommendation`** a été invalidée et repassée à `consumed` (200) sur le replay, produite `sinistre:statut_invalide:regle`.
+- **Healthcheck Buzz** : `/_liveness` sur port 8081 (mais 404 Sorry) — voir README.
+
+---
+
 ## [0.1.0] — 2026-08-02T16:21:22-04:00
 
 > Transformation d'un proof-of-concept figé en démonstrateur commercial vendable pour assureurs auto digitaux.
