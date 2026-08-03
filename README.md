@@ -174,6 +174,14 @@ Run the reproducible end-to-end script:
 
 Or follow the narrative walk-through : [docs/15min-demo-guide.md](docs/15min-demo-guide.md)
 
+### 📸 Live screenshots (captured from a running stack)
+
+| View | Screenshot |
+|---|---|
+| **CEO cockpit** (P&L, pipeline, approvals, audit timeline) | `docs/screenshots/dashboard-ceo.png` |
+| **Buzz workspace** (Nostr relay web UI) | `docs/screenshots/buzz-workspace.png` |
+
+
 The demo proves : synthetic claim → auto-settle (≤ €5,000) **or** CEO approval (> €5,000, signed Nostr event) → settlement execution → P&L + audit trace + kill-switch freeze.
 
 ---

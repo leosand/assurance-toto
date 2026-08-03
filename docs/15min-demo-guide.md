@@ -133,3 +133,20 @@ curl -s -X POST http://localhost:3100/killswitch -H 'Content-Type: application/j
 - Kill switch stuck => `docker compose exec postgres psql -U toto -assurance_toto -c "UPDATE kill_switch SET actif=false;"`
 
 > This demo is a technical proof-of-concept with usable architecture — and we engineered it to expect transparency. Assureur investigating it brings livelier requirements. Fact with the audit chain.
+
+---
+
+## 📸 Live screenshots (this run)
+
+Captured 2026-08-03 from the running local stack (Edge headless) :
+
+- **CEO cockpit** : `docs/screenshots/dashboard-ceo.png` (1600×1000) — P&L net cumulative €14 731, claims-to-premiums ratio 11.7 %, sales pipeline (120 clients / 200 policies), compliance & macro (GPR 132.5, inflation 2.1, BdF 3.15), pending CEO approvals, audit timeline with `correlation_id` chaining.
+- **Buzz workspace** : `docs/screenshots/buzz-workspace.png` — Nostr relay web UI served at `/repos`.
+
+Verify the live endpoints yourself:
+
+```bash
+open http://localhost:3100/dashboard   # CEO cockpit
+open http://localhost:3002/repos       # Buzz workspace
+curl -s http://localhost:3100/audit/verify   # {"ok":true}
+```
