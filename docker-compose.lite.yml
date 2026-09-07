@@ -249,7 +249,7 @@ services:
       BUZZ_SERVE_GIT_WEB_GUI: "true"
       RELAY_OWNER_PUBKEY: ${RELAY_OWNER_PUBKEY}
       BUZZ_RELAY_PRIVATE_KEY: ${BUZZ_RELAY_PRIVATE_KEY}
-      BUZZ_REQUIRE_AUTH_TOKEN: "true"
+      BUZZ_REQUIRE_AUTH_TOKEN: "false" # local demo: no token required to read the workspace; signing still enforced by the bridge for business effects
     volumes:
       - buzz_git_data:/data/git
     ports:
